@@ -1,5 +1,5 @@
 #!/bin/zsh
-#? cc — run inside Codex. Hands this conversation to Claude Code and closes
+#? cc — run inside Codex, as !cc. Hands this conversation to Claude Code and closes
 #?      Codex, so the same terminal comes back as Claude Code. One step.
 #?      Works with no Codex credit.
 #?
@@ -7,7 +7,7 @@
 #?      cc --window  open a new Terminal window instead of replacing in place
 #?      cc --no-quit stage it but leave Codex running (exit it yourself)
 #?
-#?      Typed at a shell prompt after Codex has closed, cc finishes a handoff
+#?      Typed at a shell prompt (no !) after Codex has closed, cc finishes a handoff
 #?      that is still waiting for this terminal.
 SELF="${0:A}"
 ROOT="${SELF:h}/.."

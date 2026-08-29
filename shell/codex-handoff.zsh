@@ -1,6 +1,6 @@
 # switchboard: hand a conversation between Codex and Claude Code in place.
 #
-#   in Codex:       cc     → this terminal comes back as Claude Code
+#   in Codex:       !cc    → this terminal comes back as Claude Code
 #   in Claude Code: !cx    → this terminal comes back as Codex
 #
 # This file wraps `codex` and `claude` so that when one of them exits and a

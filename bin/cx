@@ -1,11 +1,11 @@
 #!/bin/zsh
-#? cx — run inside Claude Code (type `!cx`). Hands this conversation to Codex
+#? cx — run inside Claude Code, as !cx. Hands this conversation to Codex
 #?      and closes Claude Code, so the same terminal comes back as Codex.
 #?
 #?      cx --print   show the command instead of switching
 #?      cx --no-quit stage it but leave Claude Code running
 #?
-#?      Typed at a shell prompt after Claude has closed, cx finishes a handoff
+#?      Typed at a shell prompt (no !) after Claude has closed, cx finishes a handoff
 #?      that is still waiting for this terminal.
 SELF="${0:A}"
 ROOT="${SELF:h}/.."

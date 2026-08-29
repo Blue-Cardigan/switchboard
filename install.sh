@@ -105,5 +105,5 @@ Installed. Two things to know:
     or finish any handoff by typing `cc` / `cx` at the prompt.
   * Claude Code picks the plugin up on its next session.
 
-Then: `cc` inside Codex, or `!cx` inside Claude Code.
+Then: `!cc` inside Codex, or `!cx` inside Claude Code.
 MSG

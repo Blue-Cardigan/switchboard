@@ -22,7 +22,7 @@ _switchboard_finish() {
   staged=$(node "$SB_ROOT/scripts/pending.mjs" claim "$tty" --any-age 2>/dev/null)
   if [[ -z "$staged" ]]; then
     print -u2 "switchboard: nothing staged for $tty."
-    print -u2 "Run cc inside Codex, or cx inside Claude Code, to stage a handoff first."
+    print -u2 "Run !cc inside Codex, or !cx inside Claude Code, to stage a handoff first."
     return 1
   fi
   target="${staged%%$'\t'*}"; staged="${staged#*$'\t'}"
