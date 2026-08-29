@@ -1,0 +1,20 @@
+{
+  "name": "switchboard",
+  "displayName": "Switchboard",
+  "description": "Move a conversation between Codex and Claude Code in place, in one command \u2014 or route individual turns to Codex and back with shared context.",
+  "version": "0.2.0",
+  "keywords": [
+    "codex",
+    "claude-code",
+    "handoff",
+    "session-transfer",
+    "multi-model",
+    "routing"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "Blue-Cardigan"
+  },
+  "repository": "https://github.com/Blue-Cardigan/switchboard",
+  "homepage": "https://github.com/Blue-Cardigan/switchboard"
+}

@@ -1,0 +1,62 @@
+#!/bin/zsh
+#? Move a Codex conversation into Claude Code.
+#?
+#?   cx2cc handoff    run INSIDE a Codex session (works with no Codex credit).
+#?                    Converts this session and stages it for this terminal.
+#?                    Then type /quit — see below.
+#?   cx2cc            after /quit, claims a staged handoff and replaces this
+#?                    shell with Claude Code. (Terminals opened after the shell
+#?                    wrapper was installed do this for you automatically.)
+#?   cx2cc drain      handoff, for every live Codex session at once
+#?   cx2cc list       index recent Codex sessions
+#?   cx2cc --here     reboot the session started in this directory
+#?   cx2cc 3          reboot session #3 from the list
+#?   cx2cc <path>     reboot a specific ~/.codex/sessions/**/rollout-*.jsonl
+#?
+#? Flags: --window opens a new Terminal window instead of replacing in place,
+#?        --print shows the `claude --resume` command, --full keeps the whole
+#?        session, --budget <chars> sets your own context limit.
+SELF="${0:A}"
+ROOT="${SELF:h}/.."
+# $0 is the function name inside a zsh function, so the script path is captured here.
+usage() { grep '^#?' "$SELF" | sed 's/^#?\ \{0,1\}//'; }
+
+# Claim a handoff staged for this terminal and become Claude Code.
+claim_here() {
+  local staged sid dir
+  local mytty
+  mytty=$(tty 2>/dev/null) || mytty=""
+  [[ "$mytty" == /dev/* ]] || return 1
+  staged=$(node "$ROOT/scripts/pending.mjs" claim "$mytty" 2>/dev/null) || return 1
+  [[ -n "$staged" ]] || return 1
+  local target id
+  target="${staged%%$'\t'*}"
+  staged="${staged#*$'\t'}"
+  id="${staged%%$'\t'*}"
+  dir="${staged#*$'\t'}"
+  [[ -n "$id" && -d "$dir" ]] || return 1
+  cd "$dir" || return 1
+  if [[ "$target" == "codex" ]]; then
+    print -P "%F{cyan}switchboard%f resuming the Claude conversation in Codex…"
+    exec codex resume "$id"
+  fi
+  print -P "%F{cyan}switchboard%f resuming the Codex conversation in Claude Code…"
+  exec claude --resume "$id"
+}
+
+case "$1" in
+  "")                  claim_here || usage; exit 0 ;;
+  resume|--resume)     claim_here && exit 0
+                       echo "No handoff staged for this terminal. Run 'cx2cc handoff' inside the Codex session first." >&2
+                       exit 1 ;;
+  -h|--help)           usage; exit 0 ;;
+  list|--list)         exec node "$ROOT/scripts/import.mjs" list "${@:2}" ;;
+  handoff|drain)       exec node "$ROOT/scripts/import.mjs" "$@" ;;
+  context)             exec node "$ROOT/scripts/import.mjs" "$@" ;;
+esac
+set -e
+OUT=$(node "$ROOT/scripts/import.mjs" prepare "$@") || exit 1
+SID="${OUT%%$'\t'*}"
+DIR="${OUT#*$'\t'}"
+cd "$DIR"
+exec claude --resume "$SID"

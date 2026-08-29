@@ -1,0 +1,27 @@
+#!/bin/zsh
+#? cc — run inside Codex. Hands this conversation to Claude Code and closes
+#?      Codex, so the same terminal comes back as Claude Code. One step.
+#?      Works with no Codex credit.
+#?
+#?      cc --print   show the command instead of switching
+#?      cc --window  open a new Terminal window instead of replacing in place
+#?      cc --no-quit stage it but leave Codex running (exit it yourself)
+#?
+#?      Typed at a shell prompt after Codex has closed, cc finishes a handoff
+#?      that is still waiting for this terminal.
+SELF="${0:A}"
+ROOT="${SELF:h}/.."
+case "$1" in -h|--help) grep '^#?' "$SELF" | sed 's/^#?\ \{0,1\}//'; exit 0 ;; esac
+SB_ROOT="$ROOT"
+source "$ROOT/scripts/finish.zsh"
+# Typed at a shell prompt with a handoff already waiting here? Finish that one
+# rather than trying to start a new one. This is what makes cc/cx work in a
+# terminal whose shell never sourced the wrapper.
+if [[ "$(node "$ROOT/scripts/context.mjs")" != codex && -n "$(_switchboard_staged)" ]]; then
+  _switchboard_finish
+  exit $?
+fi
+args=(handoff --replace)
+[[ " $* " == *" --no-quit "* ]] || args+=(--quit)
+for a in "$@"; do [[ "$a" == "--no-quit" ]] || args+=("$a"); done
+exec node "$ROOT/scripts/import.mjs" "${args[@]}"
