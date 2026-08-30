@@ -11,8 +11,9 @@ Same terminal pane, no new window, so it works in Zed, tmux or anywhere else. `!
 no Codex credit — rescuing a session that has run out is the point.
 
 Each command converts the conversation, closes the agent you are leaving, and reopens the
-other one on it. `--no-quit` stages the switch without closing anything; `--print` just
-shows the resume command.
+other one on it. `--alongside` keeps both instead: the other agent opens in a tmux split,
+or a new tab or window, and nothing closes. `--no-quit` stages the switch without closing
+anything; `--print` just shows the resume command.
 
 ## Requirements
 
@@ -43,6 +44,25 @@ re-read files rather than trust the summary. Long sessions are trimmed to ~120k 
 
 **Claude Code → Codex** uses Codex's own importer, so the result is an ordinary Codex
 thread. Re-importing the same conversation reuses that thread instead of duplicating it.
+
+## Claude desktop
+
+Claude desktop's local agent mode writes ordinary Claude Code transcripts, so those
+conversations can go to Codex too:
+
+```bash
+cx --desktop      # list them
+cx --desktop 2    # hand conversation 2 to Codex, opened alongside
+```
+
+The transcript is copied into `~/.claude/projects` on the way through — Codex imports only
+from there — which also makes it resumable with `claude --resume`. `--cwd DIR` resumes
+somewhere other than the session's own sandbox.
+
+The ChatGPT desktop app disables its own `/import` while it is attached to the local
+app-server daemon, which is why the sync appears to run once and then never again. This is
+the way round that. Threads created this way may not show in the app's list; `codex resume`
+always finds them.
 
 ## If nothing reopens
 

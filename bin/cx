@@ -2,8 +2,14 @@
 #? cx — run inside Claude Code, as !cx. Hands this conversation to Codex
 #?      and closes Claude Code, so the same terminal comes back as Codex.
 #?
-#?      cx --print   show the command instead of switching
-#?      cx --no-quit stage it but leave Claude Code running
+#?      cx --alongside  open Codex beside this session instead of replacing it
+#?                      (tmux split, or a new tab/window) and leave Claude running
+#?      cx --print      show the command instead of switching
+#?      cx --no-quit    stage it but leave Claude Code running
+#?
+#?      cx --desktop      list conversations from Claude desktop's local agent mode
+#?      cx --desktop 2    hand desktop conversation 2 to Codex, opened alongside
+#?                        (--print to just show the command, --cwd DIR to resume elsewhere)
 #?
 #?      Typed at a shell prompt (no !) after Claude has closed, cx finishes a handoff
 #?      that is still waiting for this terminal.
@@ -14,12 +20,16 @@ SB_ROOT="$ROOT"
 source "$ROOT/scripts/finish.zsh"
 # Typed at a shell prompt with a handoff already waiting here? Finish that one
 # rather than trying to start a new one. This is what makes cc/cx work in a
-# terminal whose shell never sourced the wrapper.
-if [[ "$(node "$ROOT/scripts/context.mjs")" != claude && -n "$(_switchboard_staged)" ]]; then
+# terminal whose shell never sourced the wrapper. --desktop is always a fresh
+# import, so it never claims a staged handoff.
+if [[ " $* " != *" --desktop "* && "$(node "$ROOT/scripts/context.mjs")" != claude && -n "$(_switchboard_staged)" ]]; then
   _switchboard_finish
   exit $?
 fi
 args=()
-[[ " $* " == *" --no-quit "* ]] || args+=(--quit)
+# --alongside adds a session rather than taking this one over, so nothing closes.
+if [[ " $* " != *" --no-quit "* && " $* " != *" --alongside "* && " $* " != *" --desktop "* ]]; then
+  args+=(--quit)
+fi
 for a in "$@"; do [[ "$a" == "--no-quit" ]] || args+=("$a"); done
 exec node "$ROOT/scripts/tocodex.mjs" "${args[@]}"

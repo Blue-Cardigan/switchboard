@@ -1,8 +1,8 @@
 {
   "name": "switchboard",
   "displayName": "Switchboard",
-  "description": "Move a conversation between Codex and Claude Code in place, in one command \u2014 or route individual turns to Codex and back with shared context.",
-  "version": "0.2.0",
+  "description": "Move a conversation between Codex and Claude Code in place, in one command \u2014 or route individual turns to Codex and back with shared context. Also imports Claude desktop conversations into Codex.",
+  "version": "0.3.0",
   "keywords": [
     "codex",
     "claude-code",

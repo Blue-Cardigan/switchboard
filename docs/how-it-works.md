@@ -26,6 +26,25 @@ the age limit, since you asked for it explicitly.
 The wrapper only claims entries meant for it — `codex()` takes `claude` targets and vice
 versa — so the two never steal each other's handoffs.
 
+## Claude desktop sessions
+
+Claude desktop's local agent mode runs each conversation in its own sandbox under
+`~/Library/Application Support/Claude/local-agent-mode-sessions/`, and inside that sandbox
+it writes a normal Claude Code transcript. A `local_<id>.json` sidecar beside each sandbox
+gives the title and names the transcript, which is what `cx --desktop` lists.
+
+Codex will only import Claude sessions it finds under `~/.claude/projects`. Handed a path
+outside that, `externalAgentConfig/import` does not error — it ignores the request and
+imports its own default set instead, which is how you end up with a thread that is not the
+conversation you asked for. So the desktop transcript is copied into `~/.claude/projects`
+first, and the import is checked against Codex's ledgers by path *and* content hash.
+
+There are two of those ledgers, both in `~/.codex`: `external_agent_session_imports.json`
+for the CLI importer and `claude-cowork-import-history.json` for the desktop app's sync.
+Both are consulted, so an import the ChatGPT app already did is reused rather than repeated.
+An import is only reused while the content hash still matches; a conversation that has grown
+since is imported again.
+
 ## Notes
 
 - `/rollout` does **not** exist as a Codex command, despite that string appearing in the

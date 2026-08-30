@@ -88,17 +88,28 @@ class AppServer {
   }
 }
 
+// Codex keeps two import ledgers: one for its own external-agent importer, and
+// one for the desktop app's Claude sync. They record the same thing under
+// different key styles, so check both — an import the ChatGPT app already did
+// should be reused rather than repeated.
+const LEDGERS = [
+  { file: 'external_agent_session_imports.json', source: 'source_path', sha: 'content_sha256', thread: 'imported_thread_id' },
+  { file: 'claude-cowork-import-history.json', source: 'sourcePath', sha: 'contentSha256', thread: 'importedThreadId' },
+];
+
 function ledgerThreadId(sourcePath) {
-  const file = path.join(codexHome(), 'external_agent_session_imports.json');
-  let ledger;
-  try { ledger = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
   const canonical = fs.realpathSync(sourcePath);
   const sha = crypto.createHash('sha256').update(fs.readFileSync(canonical)).digest('hex');
-  const records = Array.isArray(ledger?.records) ? ledger.records : [];
-  const match = records
-    .filter((r) => r?.source_path === canonical && r?.content_sha256 === sha && typeof r?.imported_thread_id === 'string')
-    .at(-1);
-  return match?.imported_thread_id ?? null;
+  for (const keys of LEDGERS) {
+    let ledger;
+    try { ledger = JSON.parse(fs.readFileSync(path.join(codexHome(), keys.file), 'utf8')); } catch { continue; }
+    const records = Array.isArray(ledger?.records) ? ledger.records : [];
+    const match = records
+      .filter((r) => r?.[keys.source] === canonical && r?.[keys.sha] === sha && typeof r?.[keys.thread] === 'string')
+      .at(-1);
+    if (match) return match[keys.thread];
+  }
+  return null;
 }
 
 /**
@@ -107,6 +118,10 @@ function ledgerThreadId(sourcePath) {
  */
 export async function importClaudeSession(sourcePath, cwd) {
   const source = fs.realpathSync(sourcePath);
+  // Codex only imports sessions it finds under ~/.claude/projects. Hand it
+  // anything else and it quietly ignores the request and imports its own default
+  // set instead, so refuse rather than return someone else's thread. Claude
+  // desktop transcripts are copied in first — see materialiseDesktopSession.
   const projects = path.join(os.homedir(), '.claude', 'projects');
   if (!source.startsWith(projects + path.sep)) {
     throw new Error(`Codex imports Claude sessions only from ${projects}`);

@@ -3,9 +3,10 @@
 #?      Codex, so the same terminal comes back as Claude Code. One step.
 #?      Works with no Codex credit.
 #?
-#?      cc --print   show the command instead of switching
-#?      cc --window  open a new Terminal window instead of replacing in place
-#?      cc --no-quit stage it but leave Codex running (exit it yourself)
+#?      cc --alongside  open Claude Code beside this session instead of replacing it
+#?                      (tmux split, or a new tab/window) and leave Codex running
+#?      cc --print      show the command instead of switching
+#?      cc --no-quit    stage it but leave Codex running (exit it yourself)
 #?
 #?      Typed at a shell prompt (no !) after Codex has closed, cc finishes a handoff
 #?      that is still waiting for this terminal.
@@ -22,6 +23,9 @@ if [[ "$(node "$ROOT/scripts/context.mjs")" != codex && -n "$(_switchboard_stage
   exit $?
 fi
 args=(handoff --replace)
-[[ " $* " == *" --no-quit "* ]] || args+=(--quit)
+# --alongside adds a session rather than taking this one over, so nothing closes.
+if [[ " $* " != *" --no-quit "* && " $* " != *" --alongside "* && " $* " != *" --window "* ]]; then
+  args+=(--quit)
+fi
 for a in "$@"; do [[ "$a" == "--no-quit" ]] || args+=("$a"); done
 exec node "$ROOT/scripts/import.mjs" "${args[@]}"

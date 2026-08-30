@@ -13,7 +13,7 @@ import { eventsToEntries, buildPreamble, writeTranscript } from './lib/claudeTra
 import { detectCurrentSession, findCodexAncestor, openRollouts, resolveCodexTty } from './lib/currentSession.mjs';
 import { ROOT } from './lib/state.mjs';
 import { wrapperActive } from './lib/agentContext.mjs';
-import { openInTerminal, resumeCommand } from './lib/launch.mjs';
+import { openAlongside, openInTerminal, resumeCommand } from './lib/launch.mjs';
 
 function parse(argv) {
   const flags = {};
@@ -104,7 +104,10 @@ async function handoff(verb, flags, sessions, cwd, rest = []) {
   }
 
   const wrapperInstalled = fs.existsSync(path.join(ROOT, 'wrapper-installed'));
-  const wantsReplace = flags.replace || (wrapperInstalled && !flags.window && !flags.print);
+  // --alongside (--window is the old name) opens Claude next to Codex instead of
+  // taking its terminal, so nothing gets staged and nothing gets closed.
+  const alongside = Boolean(flags.alongside || flags.window);
+  const wantsReplace = !alongside && (flags.replace || (wrapperInstalled && !flags.print));
   let staged = 0;
   let quitting = false;
 
@@ -137,11 +140,12 @@ async function handoff(verb, flags, sessions, cwd, rest = []) {
         }
         continue;
       }
-      console.log(`${line}\n  no terminal found for this session; opening a window instead.`);
+      console.log(`${line}\n  no terminal found for this session; opening it alongside instead.`);
     }
 
-    if (openInTerminal(written.sessionId, dir)) console.log(`${line}\n  opened a new Terminal window.`);
-    else console.log(`${line}\n  could not open Terminal; run this yourself:\n  ${resumeCommand(written.sessionId, dir)}`);
+    const how = alongside ? openAlongside(written.sessionId, dir) : (openInTerminal(written.sessionId, dir) && 'opened a new Terminal window');
+    if (how) console.log(`${line}\n  ${how}${alongside ? ' — Codex is still running here' : ''}.`);
+    else console.log(`${line}\n  nothing here can open a pane; run this yourself:\n  ${resumeCommand(written.sessionId, dir)}`);
   }
 
   if (staged && quitting && wrapperActive()) {
