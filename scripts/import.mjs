@@ -60,9 +60,15 @@ function pick(sessions, flags, rest, cwd) {
     return chosen;
   }
   const match = sessions.filter((s) => s.sessionId.startsWith(selector));
-  if (!match.length) throw new Error(`No Codex session id starts with "${selector}".`);
+  if (match.length === 1) return match[0];
   if (match.length > 1) throw new Error(`"${selector}" matches ${match.length} sessions; use more characters.`);
-  return match[0];
+
+  // Fall back to the thread name the ChatGPT desktop app shows.
+  const needle = selector.toLowerCase();
+  const named = sessions.filter((s) => (s.name || '').toLowerCase().includes(needle));
+  if (named.length === 1) return named[0];
+  if (named.length > 1) throw new Error(`"${selector}" matches ${named.length} thread names; be more specific.`);
+  throw new Error(`No Codex session id or thread name matches "${selector}".`);
 }
 
 async function convert(chosen, flags) {
@@ -187,9 +193,11 @@ async function main() {
     sessions.forEach((s, i) => {
       const mark = s.cwd === path.resolve(cwd) ? '*' : ' ';
       const size = s.bytes > 1e6 ? `${(s.bytes / 1e6).toFixed(0)}MB` : `${Math.round(s.bytes / 1e3)}kB`;
-      console.log(`${mark}${String(i + 1).padStart(3)}. ${s.sessionId.slice(0, 8)}  ${ago(s.mtime).padStart(8)}  ${size.padStart(6)}  ${s.cwd || '?'}`);
+      const label = s.name ? s.name.slice(0, 44) : (s.cwd || '?');
+      console.log(`${mark}${String(i + 1).padStart(3)}. ${s.sessionId.slice(0, 8)}  ${ago(s.mtime).padStart(8)}  ${size.padStart(6)}  ${label}`);
     });
     console.log('\n* = started in this directory. Import with the number, e.g. "1", or --here / --last.');
+    console.log('Named threads come from the ChatGPT desktop app; you can select one by name.');
     return;
   }
 

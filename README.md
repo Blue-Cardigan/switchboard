@@ -81,10 +81,15 @@ A staged handoff belongs to one terminal and is single-use.
 ## Also
 
 ```bash
-cx2cc list      # index recent Codex sessions
-cx2cc drain     # hand off every live Codex session at once
-cx2cc 3         # reboot session #3 from the list
+cx2cc list           # index recent Codex sessions, named ones first-class
+cx2cc drain          # hand off every live Codex session at once
+cx2cc 3              # reboot session #3 from the list
+cc "Review ticket"   # or pick a ChatGPT thread by its name
 ```
+
+Threads from the ChatGPT desktop app share Codex's session store, so they are listed and
+selectable by the name the app shows. Bringing one over starts a normal Claude Code session,
+which the Claude desktop app lists alongside its own while it is running.
 
 `/switchboard:import` pulls a Codex session into the Claude session you are already in,
 instead of replacing it.

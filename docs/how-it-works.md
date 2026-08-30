@@ -45,6 +45,20 @@ Both are consulted, so an import the ChatGPT app already did is reused rather th
 An import is only reused while the content hash still matches; a conversation that has grown
 since is imported again.
 
+## ChatGPT desktop threads, and what Claude desktop lists
+
+The ChatGPT desktop app uses `~/.codex` as its home, so its threads sit in the same rollout
+store the CLI writes to and `cc` can already convert them. What the app adds is names, in
+`~/.codex/session_index.jsonl` — one append per rename, so the last entry for an id wins.
+That is where the names in `cx2cc list` come from, and why a thread can be selected by name.
+
+Claude desktop lists *running* Claude Code sessions, not stored transcripts. Every live
+session registers itself in `~/.claude/sessions/<pid>.json` with its `sessionId`, `cwd`, a
+`messagingSocketPath` under `/tmp/cc-socks/`, and an `entrypoint` of `cli` or
+`claude-desktop`; the app reads that registry. So a conversation brought over from Codex
+appears in Claude desktop once it is actually resumed and running — importing the transcript
+alone is not enough.
+
 ## Notes
 
 - `/rollout` does **not** exist as a Codex command, despite that string appearing in the

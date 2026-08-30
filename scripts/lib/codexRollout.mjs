@@ -34,9 +34,27 @@ function firstLineJson(file) {
   }
 }
 
+/**
+ * Thread names, as the ChatGPT desktop app shows them. The app appends to this
+ * index as it renames a thread, so the last entry for an id wins.
+ */
+function threadNames(codexHome = process.env.CODEX_HOME || path.join(os.homedir(), '.codex')) {
+  const names = new Map();
+  let text;
+  try { text = fs.readFileSync(path.join(codexHome, 'session_index.jsonl'), 'utf8'); } catch { return names; }
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    let row;
+    try { row = JSON.parse(line); } catch { continue; }
+    if (row?.id && row?.thread_name) names.set(row.id, row.thread_name);
+  }
+  return names;
+}
+
 /** Index recent Codex sessions cheaply, newest first. */
 export function listSessions({ limit = 20, cwd = null, codexHome } = {}) {
   const files = walk(sessionsRoot(codexHome));
+  const names = threadNames(codexHome);
   const rows = [];
   for (const file of files) {
     let stat;
@@ -49,10 +67,13 @@ export function listSessions({ limit = 20, cwd = null, codexHome } = {}) {
     const sessionId = rolloutId || payload.session_id || payload.id || path.basename(file);
     const sessionCwd = payload.cwd || null;
     if (cwd && sessionCwd !== path.resolve(cwd)) continue;
+    const threadId = payload.session_id || payload.id || null;
     rows.push({
       file,
       sessionId,
-      threadId: payload.session_id || payload.id || null,
+      threadId,
+      // Named threads come from the ChatGPT desktop app; CLI sessions have none.
+      name: names.get(sessionId) || names.get(threadId) || null,
       cwd: sessionCwd,
       startedAt: payload.timestamp || meta?.timestamp || null,
       mtime: stat.mtimeMs,
