@@ -1,0 +1,26 @@
+{
+  "_comment": [
+    "The Codex half of switchboard's routing. Codex 0.151 takes the same hooks.json",
+    "shape as Claude Code, so this is hooks/hooks.json running the other way round.",
+    "",
+    "It is not installed by default: ~/.codex/hooks.json is your file, and it may",
+    "already hold hooks of your own. `./install.sh --codex-hooks` merges this entry",
+    "into it (and `./install.sh --uninstall` takes it back out again).",
+    "",
+    "${SWITCHBOARD_HOME} is substituted for the real checkout path on install;",
+    "Codex does not expand it, and a user-level hooks.json gets no plugin root."
+  ],
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${SWITCHBOARD_HOME}/scripts/route-codex.mjs\"",
+            "timeout": 900
+          }
+        ]
+      }
+    ]
+  }
+}

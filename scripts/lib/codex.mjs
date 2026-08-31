@@ -109,7 +109,8 @@ export function runCodex(opts) {
         // stdin must be closed: with an open non-TTY stdin codex blocks on
         // "Reading additional input from stdin..." forever.
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: process.env,
+        // Stops the router this run triggers from routing straight back.
+        env: { ...process.env, SWITCHBOARD_ROUTED: '1' },
       });
     } catch (err) {
       resolve({ ok: false, error: `could not start ${bin}: ${err.message}` });

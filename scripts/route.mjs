@@ -31,6 +31,10 @@ function logFailure(err) {
 }
 
 async function main() {
+  // This Claude Code run is itself a routed turn, spawned by the Codex-side
+  // router. Answer it here or the two routers bounce the prompt between them.
+  if (process.env.SWITCHBOARD_ROUTED === '1') return;
+
   const raw = readStdin();
   if (!raw.trim()) return;
 

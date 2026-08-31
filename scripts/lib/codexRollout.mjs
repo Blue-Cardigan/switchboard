@@ -84,7 +84,7 @@ export function listSessions({ limit = 20, cwd = null, codexHome } = {}) {
   return rows.slice(0, limit);
 }
 
-function textOf(content) {
+export function textOf(content) {
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) return '';
   return content
@@ -94,7 +94,7 @@ function textOf(content) {
     .trim();
 }
 
-function shellCommand(command) {
+export function shellCommand(command) {
   if (!Array.isArray(command)) return String(command || '');
   // codex wraps everything as ["/bin/zsh","-lc","<cmd>"]
   const idx = command.indexOf('-lc');

@@ -26,17 +26,26 @@ export function header(state, threadId) {
 }
 
 /**
- * The context block handed back to Claude Code. Codex's reply is always included
- * so that switching back to Claude keeps the conversation continuous; `relay`
- * only decides whether Claude re-states it to the user.
+ * The context block handed back to the agent that was skipped. The other agent's
+ * reply is always included so that switching back keeps the conversation
+ * continuous; `relay` only decides whether the reading agent re-states it.
+ *
+ * Both routers use this. `answeredBy` and `back` name the other side, because
+ * turns travel in both directions.
  */
-export function contextBlock({ state, threadId, reply, turns }) {
+export function contextBlock({
+  state, threadId, reply, turns,
+  answeredBy = 'Codex',
+  headerText = null,
+  back = '/switchboard:switch claude',
+}) {
   const quiet = state.relay === 'quiet';
+  const tag = answeredBy.toLowerCase();
   const instruction = quiet
     ? [
         'The user has already seen this reply in their terminal. Do NOT repeat it.',
         'Respond with a single short line only if you have something material to add;',
-        'otherwise respond with exactly: (codex)',
+        `otherwise respond with exactly: (${tag})`,
       ].join(' ')
     : [
         'Relay the reply below to the user verbatim, as your entire response.',
@@ -45,25 +54,32 @@ export function contextBlock({ state, threadId, reply, turns }) {
 
   return [
     '<switchboard>',
-    `This turn was routed to Codex (${header(state, threadId)}); Codex turn ${turns} of this thread.`,
+    `This turn was routed to ${answeredBy} (${headerText ?? header(state, threadId)});` +
+      ` ${answeredBy} turn ${turns} of this thread.`,
     'You did not produce this answer and must not claim you did.',
     instruction,
-    'Keep it in context: if the user switches back with /switchboard:switch claude, this is what was said and done.',
+    `Keep it in context: if the user switches back with ${back}, this is what was said and done.`,
     '',
-    '--- codex reply ---',
+    `--- ${tag} reply ---`,
     reply,
-    '--- end codex reply ---',
+    `--- end ${tag} reply ---`,
     '</switchboard>',
   ].join('\n');
 }
 
-export function errorBlock({ state, error }) {
+export function errorBlock({
+  state, error,
+  answeredBy = 'Codex',
+  settings = null,
+  back = '/switchboard:switch claude',
+}) {
   return [
     '<switchboard>',
-    `Routing this turn to Codex failed: ${error}`,
-    `Switchboard is still in codex mode for this directory (profile ${state.profile || 'default'}).`,
+    `Routing this turn to ${answeredBy} failed: ${error}`,
+    `Switchboard is still routing this directory to ${answeredBy}` +
+      ` (${settings ?? `profile ${state.profile || 'default'}`}).`,
     'Tell the user the routing failed and quote the error. Do not answer the original prompt yourself',
-    'unless they ask you to, and mention they can return to you with /switchboard:switch claude.',
+    `unless they ask you to, and mention they can take the conversation back with ${back}.`,
     '</switchboard>',
   ].join('\n');
 }

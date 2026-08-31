@@ -12,6 +12,10 @@
 #?   cx2cc --here     reboot the session started in this directory
 #?   cx2cc 3          reboot session #3 from the list
 #?   cx2cc <path>     reboot a specific ~/.codex/sessions/**/rollout-*.jsonl
+#?   cx2cc context    print the conversation, for pasting somewhere yourself
+#?   cx2cc desktop    list Claude desktop conversations; add a number to resume one
+#?   cx2cc switch …   route this Codex session's prompts to Claude Code and back
+#?                    (status | claude | codex | toggle | reset | ask <prompt>)
 #?
 #? Flags: --window opens a new Terminal window instead of replacing in place,
 #?        --print shows the `claude --resume` command, --full keeps the whole
@@ -53,6 +57,14 @@ case "$1" in
   list|--list)         exec node "$ROOT/scripts/import.mjs" list "${@:2}" ;;
   handoff|drain)       exec node "$ROOT/scripts/import.mjs" "$@" ;;
   context)             exec node "$ROOT/scripts/import.mjs" "$@" ;;
+  switch)              exec node "$ROOT/scripts/switch.mjs" "${@:2}" ;;
+  desktop)             OUT=$(node "$ROOT/scripts/import.mjs" "$@") || exit 1
+                       # A selector prints "<id>\t<dir>" to resume; a list prints prose.
+                       if [[ "$OUT" == *$'\t'* ]]; then
+                         cd "${OUT#*$'\t'}" || exit 1
+                         exec claude --resume "${OUT%%$'\t'*}"
+                       fi
+                       print -r -- "$OUT"; exit 0 ;;
 esac
 set -e
 OUT=$(node "$ROOT/scripts/import.mjs" prepare "$@") || exit 1

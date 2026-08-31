@@ -1,14 +1,16 @@
 #!/bin/sh
 # Switchboard installer. Idempotent: safe to re-run, and to run after a git pull.
 #
-#   ./install.sh              install
-#   ./install.sh --uninstall  remove everything it added
+#   ./install.sh                install
+#   ./install.sh --codex-hooks  also route Codex prompts to Claude (opt-in)
+#   ./install.sh --uninstall    remove everything it added
 #
 # What it touches, and nothing else:
 #   ~/.local/bin/{cc,cx,cx2cc}                    symlinks to bin/
 #   ~/.config/switchboard/codex-handoff.zsh       symlink to shell/
 #   ~/.zshrc                                      one `source` line (backed up)
 #   ~/.claude/skills/switchboard                  symlink, so Claude Code loads the plugin
+#   ~/.codex/hooks.json                           one entry, only with --codex-hooks
 set -eu
 
 REPO=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
@@ -24,8 +26,30 @@ warn() { printf '  ! %s\n' "$*" >&2; }
 # left alone rather than clobbered.
 ours() { [ -L "$1" ] && case "$(readlink "$1")" in "$REPO"|"$REPO"/*) return 0 ;; esac; return 1; }
 
+if [ "${1:-}" = "--codex-hooks" ]; then
+  # Codex 0.151 reads ~/.codex/hooks.json the way Claude Code reads its own, so
+  # the router works in that direction too — but that file is yours, and may
+  # already hold hooks, so switchboard never edits it uninvited.
+  printf 'Installing the Codex-side router...\n'
+  node "$REPO/scripts/install-codex-hook.mjs" install
+  cat <<'MSG'
+
+  Codex now sends its prompts to Claude Code whenever a directory is switched
+  to claude mode. Inside Codex:
+
+    !cx2cc switch claude    Claude answers from here on
+    !cx2cc switch codex     Codex takes it back
+    !cx2cc switch status    which one is answering
+
+  Codex asks you to trust a new hook the first time it runs. Nothing is routed
+  until you say yes, and nothing changes for directories you never switch.
+MSG
+  exit 0
+fi
+
 if [ "${1:-}" = "--uninstall" ]; then
   printf 'Removing switchboard...\n'
+  node "$REPO/scripts/install-codex-hook.mjs" remove 2>/dev/null || true
   for c in cc cx cx2cc; do
     if ours "$HOME/.local/bin/$c"; then rm -f "$HOME/.local/bin/$c"; say "removed ~/.local/bin/$c"; fi
   done
@@ -106,4 +130,7 @@ Installed. Two things to know:
   * Claude Code picks the plugin up on its next session.
 
 Then: `!cc` inside Codex, or `!cx` inside Claude Code.
+
+Routing Codex's prompts to Claude Code needs one more opt-in step, because it
+edits ~/.codex/hooks.json: run `./install.sh --codex-hooks`.
 MSG

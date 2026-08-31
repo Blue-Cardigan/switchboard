@@ -84,6 +84,20 @@ export function detectCurrentSession({ cwd = process.cwd() } = {}) {
   return null;
 }
 
+/**
+ * The rollout a known session id is writing to. Codex's hook payload names the
+ * session but not its file, and the router needs the file to read the turns it
+ * has not forwarded yet.
+ */
+export function rolloutForSession(sessionId, cwd = process.cwd()) {
+  if (sessionId) {
+    const match = listSessions({ limit: 200 })
+      .find((s) => s.sessionId === sessionId || s.threadId === sessionId);
+    if (match) return match.file;
+  }
+  return detectCurrentSession({ cwd })?.file ?? null;
+}
+
 function ttyOf(pid) {
   const t = ps('tty', pid).trim();
   return t && t !== '??' ? t.replace(/^\/dev\//, '') : null;
