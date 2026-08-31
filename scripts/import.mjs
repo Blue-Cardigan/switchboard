@@ -3,6 +3,7 @@
 //   list                     index recent Codex sessions
 //   prepare [selector]       write the transcript, print "<sessionId>\t<cwd>"
 //   context [selector]       print the conversation for pasting into a live session
+//   desktop [selector]       same, for a Claude desktop (local agent mode) session
 // Selector: --last | --here | <index from list> | <session id prefix>
 import path from 'node:path';
 import fs from 'node:fs';
@@ -10,6 +11,7 @@ import os from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
 import { listSessions, readRollout, trimEvents } from './lib/codexRollout.mjs';
 import { eventsToEntries, buildPreamble, writeTranscript } from './lib/claudeTranscript.mjs';
+import { desktopRoot, listDesktopSessions, materialiseDesktopSession, pickDesktopSession } from './lib/claudeDesktop.mjs';
 import { detectCurrentSession, findCodexAncestor, openRollouts, resolveCodexTty } from './lib/currentSession.mjs';
 import { ROOT } from './lib/state.mjs';
 import { wrapperActive } from './lib/agentContext.mjs';
@@ -21,6 +23,9 @@ function parse(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--limit') { flags.limit = Number(argv[++i]); continue; }
+    // These take a value. Without this they would parse as booleans and their
+    // value would fall through to `rest`, where it reads as a session selector.
+    if (arg === '--cwd' || arg === '--budget') { flags[arg.slice(2)] = argv[++i]; continue; }
     if (arg.startsWith('--')) { flags[arg.slice(2)] = true; continue; }
     rest.push(arg);
   }
@@ -176,10 +181,76 @@ async function handoff(verb, flags, sessions, cwd, rest = []) {
   }
 }
 
+function desktopList(sessions) {
+  console.log('Claude desktop sessions:\n');
+  sessions.forEach((s, i) => {
+    const size = s.bytes > 1e6 ? `${(s.bytes / 1e6).toFixed(0)}MB` : `${Math.round(s.bytes / 1e3)}kB`;
+    // Every id starts local_ or local_ditto_, so the prefix carries no signal.
+    const id = s.sessionId.replace(/^local_(ditto_)?/, '').slice(0, 12);
+    const label = s.title
+      ? s.title.slice(0, 44)
+      : (s.cwd && !s.cwd.startsWith(desktopRoot()) ? s.cwd.replace(os.homedir(), '~') : '(untitled)');
+    console.log(`${String(i + 1).padStart(4)}. ${id.padEnd(12)}  ${ago(s.mtime).padStart(8)}  ${size.padStart(6)}  ${label}`);
+  });
+  console.log('\nSelect by number, session id prefix, or title; --last takes the newest.');
+  console.log('The transcript is copied into this directory\'s project, so it resumes here.');
+}
+
+/**
+ * Claude desktop (local agent mode) -> Claude Code CLI. The desktop app writes a
+ * real Claude Code transcript inside its sandbox, so this is a copy plus a cwd
+ * rewrite, not a conversion.
+ */
+async function desktop(flags, rest, cwd) {
+  const sessions = listDesktopSessions({
+    limit: flags.limit || 20,
+    includeArchived: Boolean(flags.archived),
+  });
+  if (!sessions.length) {
+    console.log(`No Claude desktop sessions with transcripts under ${desktopRoot()}.`);
+    process.exitCode = 1;
+    return;
+  }
+  if (!rest.length && !flags.last) { desktopList(sessions); return; }
+
+  const chosen = pickDesktopSession(sessions, rest[0]);
+  const target = flags.cwd ? path.resolve(String(flags.cwd)) : cwd;
+  const written = materialiseDesktopSession(chosen, target, { rewriteCwd: true });
+  const label = `${chosen.sessionId.replace(/^local_(ditto_)?/, '').slice(0, 12)}${chosen.title ? ` "${chosen.title.slice(0, 40)}"` : ''}`;
+  const note = written.continued
+    ? 'already continued here, keeping your copy'
+    : (written.copied ? 'copied' : 'already current');
+  const line = `${label} → claude ${written.sessionId.slice(0, 8)} (${note})`;
+
+  if (flags.print) {
+    console.log(`${line}\n  ${resumeCommand(written.sessionId, target)}`);
+    return;
+  }
+  if (flags.alongside || flags.window) {
+    const how = openAlongside(written.sessionId, target);
+    console.log(how
+      ? `${line}\n  ${how}.`
+      : `${line}\n  nothing here can open a pane; run this yourself:\n  ${resumeCommand(written.sessionId, target)}`);
+    return;
+  }
+
+  // Same contract as `prepare`: the caller (bin/cc) resumes it in this terminal.
+  process.stderr.write(`Claude desktop ${line}\n`);
+  process.stdout.write(`${written.sessionId}\t${target}\n`);
+}
+
 async function main() {
   const { flags, rest } = parse(process.argv.slice(2));
   const verb = (rest.shift() || 'list').toLowerCase();
   const cwd = process.cwd();
+
+  // Desktop sessions come from Application Support, not ~/.codex, so this runs
+  // before the Codex-session check below.
+  if (verb === 'desktop') {
+    await desktop(flags, rest, cwd);
+    return;
+  }
+
   const sessions = listSessions({ limit: flags.limit || 20 });
 
   if (!sessions.length) {
@@ -224,7 +295,7 @@ async function main() {
   }
 
   if (verb !== 'prepare') {
-    console.log(`Unknown action "${verb}". Use: list | prepare | context`);
+    console.log(`Unknown action "${verb}". Use: list | prepare | context | desktop`);
     process.exitCode = 1;
     return;
   }

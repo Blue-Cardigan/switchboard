@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { projectDirFor } from './claudeTranscript.mjs';
+import { isPristineAuthored, projectDirFor, recordAuthored } from './claudeTranscript.mjs';
 
 export function desktopRoot() {
   return process.env.SWITCHBOARD_CLAUDE_DESKTOP_ROOT
@@ -112,21 +112,56 @@ export function pickDesktopSession(sessions, selector) {
   throw new Error(`No Claude desktop session matches "${selector}".`);
 }
 
+// A desktop transcript records the sandbox it ran in. Resuming it somewhere else
+// leaves Claude Code reading a cwd that does not match the one it is running in,
+// so rewrite the field when the caller asked for a different directory.
+const REWRITE_MAX_BYTES = 64 * 1024 * 1024;
+
+function withCwd(buffer, cwd) {
+  if (buffer.length > REWRITE_MAX_BYTES) return buffer;
+  const target = path.resolve(cwd);
+  const out = [];
+  let changed = false;
+  for (const line of buffer.toString('utf8').split('\n')) {
+    if (!line.trim()) continue;
+    let row;
+    try { row = JSON.parse(line); } catch { out.push(line); continue; }
+    if (row && typeof row === 'object' && row.cwd && row.cwd !== target) { row.cwd = target; changed = true; }
+    out.push(JSON.stringify(row));
+  }
+  return changed ? Buffer.from(`${out.join('\n')}\n`) : buffer;
+}
+
 /**
  * Codex only imports Claude sessions it can find under ~/.claude/projects, so a
  * desktop transcript has to exist there first. Copy it in — which also makes the
  * conversation resumable with `claude --resume` — and hand back the local path.
  * Re-running is a no-op once the copy is current.
+ *
+ * `rewriteCwd` is for the Claude Code direction only. The Codex direction leaves
+ * the bytes alone so its import ledger, which dedupes on a content hash, still
+ * recognises a session it has already imported.
  */
-export function materialiseDesktopSession(session, cwd) {
+export function materialiseDesktopSession(session, cwd, { rewriteCwd = false } = {}) {
   const dir = projectDirFor(cwd);
   fs.mkdirSync(dir, { recursive: true });
   const dest = path.join(dir, path.basename(session.file));
 
-  const source = fs.readFileSync(session.file);
+  let source = fs.readFileSync(session.file);
+  if (rewriteCwd) source = withCwd(source, cwd);
   let current = null;
   try { current = fs.readFileSync(dest); } catch { /* not copied yet */ }
-  if (!current || !current.equals(source)) fs.writeFileSync(dest, source);
 
-  return { path: dest, copied: !current || !current.equals(source) };
+  // Once this copy has been resumed, Claude Code owns it and has appended turns
+  // the desktop session never had. Refreshing it from the desktop side would
+  // throw that work away, so leave a continued conversation alone.
+  if (current && !isPristineAuthored(dest)) {
+    return { path: dest, copied: false, continued: true, sessionId: path.basename(dest, '.jsonl') };
+  }
+
+  const copied = !current || !current.equals(source);
+  if (copied) fs.writeFileSync(dest, source);
+  recordAuthored(dest);
+
+  return { path: dest, copied, continued: false, sessionId: path.basename(dest, '.jsonl') };
 }

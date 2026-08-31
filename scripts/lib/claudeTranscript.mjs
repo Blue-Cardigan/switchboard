@@ -8,6 +8,41 @@ export function projectDirFor(cwd) {
   return path.join(os.homedir(), '.claude', 'projects', slug);
 }
 
+// Transcripts switchboard put into a project directory itself — imported Codex
+// threads and copied desktop sessions. They sit next to real ones and are newer
+// than all of them, so "the newest transcript here is the live conversation"
+// would otherwise pick one of ours. Size and mtime are recorded as written: once
+// Claude Code resumes a transcript it appends to it, the record stops matching,
+// and the file counts as a live conversation again.
+const AUTHORED = path.join(os.homedir(), '.claude', 'switchboard', 'authored.json');
+const AUTHORED_KEEP = 200;
+
+function readAuthored() {
+  try { return JSON.parse(fs.readFileSync(AUTHORED, 'utf8')); } catch { return {}; }
+}
+
+export function recordAuthored(file) {
+  let stat;
+  try { stat = fs.statSync(file); } catch { return; }
+  const index = readAuthored();
+  index[path.resolve(file)] = { bytes: stat.size, mtimeMs: Math.round(stat.mtimeMs), at: Date.now() };
+
+  const entries = Object.entries(index).sort((a, b) => (b[1].at || 0) - (a[1].at || 0));
+  try {
+    fs.mkdirSync(path.dirname(AUTHORED), { recursive: true });
+    fs.writeFileSync(AUTHORED, `${JSON.stringify(Object.fromEntries(entries.slice(0, AUTHORED_KEEP)), null, 2)}\n`);
+  } catch { /* the index is an optimisation, never a requirement */ }
+}
+
+/** True when switchboard wrote this file and nothing has appended to it since. */
+export function isPristineAuthored(file) {
+  const record = readAuthored()[path.resolve(file)];
+  if (!record) return false;
+  let stat;
+  try { stat = fs.statSync(file); } catch { return false; }
+  return stat.size === record.bytes && Math.round(stat.mtimeMs) === record.mtimeMs;
+}
+
 /** Claude Code rebuilds API messages from these rows, so same-role runs are merged. */
 function normalise(entries) {
   const merged = [];
@@ -138,5 +173,6 @@ export function writeTranscript({ cwd, entries, preamble, gitBranch = '', versio
 
   const file = path.join(dir, `${sessionId}.jsonl`);
   fs.writeFileSync(file, `${rows.map((r) => JSON.stringify(r)).join('\n')}\n`);
+  recordAuthored(file);
   return { sessionId, file, rows: rows.length };
 }
