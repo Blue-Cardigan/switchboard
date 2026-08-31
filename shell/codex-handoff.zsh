@@ -41,27 +41,67 @@ _switchboard_claim() {
   exec claude --resume "$id"
 }
 
-# Some environments (Claude Code's own bash tool, for one) replay captured shell
-# functions selectively and drop the underscore-prefixed helper while keeping
-# the wrappers below. Reload our definitions rather than failing with
-# "command not found"; if that is impossible, pass through untouched.
-_switchboard_ready() {
-  typeset -f _switchboard_claim >/dev/null 2>&1 && return 0
-  local rc="${SWITCHBOARD_RC:-$HOME/.config/switchboard/codex-handoff.zsh}"
-  [[ -r "$rc" ]] && source "$rc"
-  typeset -f _switchboard_claim >/dev/null 2>&1
-}
-
+# Reloading is done inline in each wrapper below, not through a helper. Some
+# environments (Claude Code's own bash tool, for one) replay captured shell
+# functions selectively: they keep `codex`/`claude` and drop everything
+# underscore-prefixed. A helper that is missing cannot restore itself, so the
+# bootstrap has to use nothing but builtins.
+# Subcommands that are not an interactive conversation. Nothing is handed over
+# when one of these exits, and claiming a staged handoff there would replace a
+# shell someone is using for something else — `codex exec` inside a script or
+# another agent, for instance. `resume`, `fork` and a bare prompt still qualify.
 codex() {
+  case "$1" in
+    exec|e|review|login|logout|mcp|mcp-server|app-server|remote-control|app|plugin|\
+completion|update|doctor|sandbox|debug|apply|a|queue|archive|delete|unarchive|\
+migrate-rollouts|cloud|exec-server|features|help|-h|--help|-V|--version)
+      command codex "$@"
+      return $?
+      ;;
+  esac
   command codex "$@"
   local rc=$?
-  _switchboard_ready 2>/dev/null || return $rc
+  # A routed turn is switchboard driving Codex on the user's behalf; it owns no
+  # terminal and must not claim one.
+  [[ "$SWITCHBOARD_ROUTED" == 1 ]] && return $rc
+  if ! typeset -f _switchboard_claim >/dev/null 2>&1; then
+    _sb_rc="${SWITCHBOARD_RC:-$HOME/.config/switchboard/codex-handoff.zsh}"
+    [[ -r "$_sb_rc" ]] && source "$_sb_rc"
+    unset _sb_rc
+  fi
+  typeset -f _switchboard_claim >/dev/null 2>&1 || return $rc
   _switchboard_claim claude || return $rc
 }
 
 claude() {
+  case "$1" in
+    agents|auth|auto-mode|config|doctor|gateway|import|install|logs|mcp|\
+migrate-installer|plugin|plugins|project|respawn|rm|setup-token|stop|kill|\
+ultrareview|update|upgrade|-h|--help|--version)
+      command claude "$@"
+      return $?
+      ;;
+  esac
+  # -p/--print is headless: it prints one reply and exits. It is also how
+  # switchboard drives Claude from the Codex side, so it can appear anywhere in
+  # the arguments and must never trigger a claim.
+  local _sb_arg
+  for _sb_arg in "$@"; do
+    case "$_sb_arg" in
+      -p|--print)
+        command claude "$@"
+        return $?
+        ;;
+    esac
+  done
   command claude "$@"
   local rc=$?
-  _switchboard_ready 2>/dev/null || return $rc
+  [[ "$SWITCHBOARD_ROUTED" == 1 ]] && return $rc
+  if ! typeset -f _switchboard_claim >/dev/null 2>&1; then
+    _sb_rc="${SWITCHBOARD_RC:-$HOME/.config/switchboard/codex-handoff.zsh}"
+    [[ -r "$_sb_rc" ]] && source "$_sb_rc"
+    unset _sb_rc
+  fi
+  typeset -f _switchboard_claim >/dev/null 2>&1 || return $rc
   _switchboard_claim codex || return $rc
 }
