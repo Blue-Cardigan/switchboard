@@ -2,6 +2,7 @@ import fs from 'node:fs';
 
 const MAX_TURN_CHARS = 4000;
 const MAX_TOTAL_CHARS = 24000;
+const ARTEFACT = /^\s*<(local-command-caveat|command-name|command-message|command-args|command-stdout)\b/;
 
 function blockText(block) {
   if (typeof block === 'string') return block;
@@ -64,6 +65,9 @@ export function readTurnsSince(transcriptPath, fromLine = 0) {
     if (!text) continue;
     // Hook stdout from a previous turn re-enters the transcript as a user turn.
     if (text.startsWith('<switchboard')) continue;
+    // So do Claude Code's own UI artefacts: slash-command echoes and the caveat
+    // it prepends to them. Neither is anything the other agent should read.
+    if (ARTEFACT.test(text)) continue;
 
     turns.push({ role: entry.type, text: clamp(text, MAX_TURN_CHARS) });
   }
@@ -72,15 +76,17 @@ export function readTurnsSince(transcriptPath, fromLine = 0) {
 }
 
 /**
- * Render turns as a briefing block for Codex. `currentPrompt` is dropped if the
- * transcript already flushed it, so Codex never sees the live prompt twice.
+ * Render turns as a briefing block for the agent taking the next turn.
+ * `currentPrompt` is dropped if the transcript already flushed it, so the
+ * receiving agent never sees the live prompt twice. `assistantLabel` names who
+ * wrote the assistant turns — the briefing goes both ways now.
  */
-export function renderBriefing(turns, currentPrompt) {
+export function renderBriefing(turns, currentPrompt, { assistantLabel = 'Claude' } = {}) {
   const usable = turns.filter((t) => !(t.role === 'user' && t.text.trim() === (currentPrompt || '').trim()));
   if (!usable.length) return '';
 
   const rendered = usable
-    .map((t) => `${t.role === 'user' ? 'User' : 'Claude'}: ${t.text}`)
+    .map((t) => `${t.role === 'user' ? 'User' : assistantLabel}: ${t.text}`)
     .join('\n\n');
 
   const body = rendered.length > MAX_TOTAL_CHARS

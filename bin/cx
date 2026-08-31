@@ -11,6 +11,11 @@
 #?      cx --desktop 2    hand desktop conversation 2 to Codex, opened alongside
 #?                        (--print to just show the command, --cwd DIR to resume elsewhere)
 #?
+#?      cx --context      print this conversation as text, to paste into Codex yourself
+#?      cx --queue        push it into the Codex session already running here
+#?      cx --queue <id>   push it into a named Codex session
+#?                        (both leave Claude Code running and start no new thread)
+#?
 #?      Typed at a shell prompt (no !) after Claude has closed, cx finishes a handoff
 #?      that is still waiting for this terminal.
 SELF="${0:A}"
@@ -22,13 +27,13 @@ source "$ROOT/scripts/finish.zsh"
 # rather than trying to start a new one. This is what makes cc/cx work in a
 # terminal whose shell never sourced the wrapper. --desktop is always a fresh
 # import, so it never claims a staged handoff.
-if [[ " $* " != *" --desktop "* && "$(node "$ROOT/scripts/context.mjs")" != claude && -n "$(_switchboard_staged)" ]]; then
+if [[ " $* " != *" --desktop "* && " $* " != *" --context "* && " $* " != *" --queue "* && "$(node "$ROOT/scripts/context.mjs")" != claude && -n "$(_switchboard_staged)" ]]; then
   _switchboard_finish
   exit $?
 fi
 args=()
 # --alongside adds a session rather than taking this one over, so nothing closes.
-if [[ " $* " != *" --no-quit "* && " $* " != *" --alongside "* && " $* " != *" --desktop "* ]]; then
+if [[ " $* " != *" --no-quit "* && " $* " != *" --alongside "* && " $* " != *" --desktop "* && " $* " != *" --context "* && " $* " != *" --queue "* ]]; then
   args+=(--quit)
 fi
 for a in "$@"; do [[ "$a" == "--no-quit" ]] || args+=("$a"); done

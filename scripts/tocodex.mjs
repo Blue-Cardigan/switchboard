@@ -3,11 +3,13 @@
 // or one from Claude desktop's local agent mode.
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawnSync, spawn } from 'node:child_process';
 import { ROOT } from './lib/state.mjs';
 import { importClaudeSession } from './lib/toCodex.mjs';
 import { wrapperActive } from './lib/agentContext.mjs';
-import { projectDirFor } from './lib/claudeTranscript.mjs';
+import { isPristineAuthored, projectDirFor } from './lib/claudeTranscript.mjs';
+import { readTurnsSince, renderBriefing } from './lib/transcript.mjs';
+import { listSessions } from './lib/codexRollout.mjs';
 import { listDesktopSessions, materialiseDesktopSession, pickDesktopSession } from './lib/claudeDesktop.mjs';
 import { openAlongside, resumeCommand } from './lib/launch.mjs';
 
@@ -51,6 +53,9 @@ function newestTranscript(cwd) {
   try { names = fs.readdirSync(dir).filter((f) => f.endsWith('.jsonl')); } catch { return null; }
   for (const name of names) {
     const full = path.join(dir, name);
+    // A transcript switchboard wrote for an import, which nobody has resumed, is
+    // not this conversation. Handing one back would return Codex its own words.
+    if (isPristineAuthored(full)) continue;
     let stat;
     try { stat = fs.statSync(full); } catch { continue; }
     if (!best || stat.mtimeMs > best.mtimeMs) best = { path: full, mtimeMs: stat.mtimeMs };
@@ -116,6 +121,67 @@ async function fromDesktop(flags, selector) {
   else console.log(`${line}\n  run this to pick it up:\n  ${resumeCommand(threadId, cwd, 'codex')}`);
 }
 
+/** Read this conversation's turns, or explain why there are none. */
+function turnsOf(session) {
+  const { turns } = readTurnsSince(session.source, 0);
+  if (!turns.length) throw new Error(`No conversation recovered from ${session.source}.`);
+  return turns;
+}
+
+/**
+ * Print the conversation as text — the mirror of `cx2cc context`. For pasting
+ * into a Codex session that is already running, when you want its context
+ * without starting a new thread.
+ */
+function printContext(session) {
+  const turns = turnsOf(session);
+  console.log(`Claude Code conversation in ${session.cwd} — ${turns.length} turns, ${session.via}.`);
+  for (const turn of turns) {
+    console.log(`\n### ${turn.role === 'user' ? 'You (in Claude Code)' : 'Claude'}\n${turn.text}`);
+  }
+}
+
+/**
+ * Push the conversation into a Codex thread that is already running, rather than
+ * opening a new one. `codex queue` appends to a live session's input queue, so
+ * the transcript lands in the TUI the user is looking at.
+ */
+function queueToThread(session, selector) {
+  let thread = typeof selector === 'string' ? selector : null;
+  if (!thread) {
+    const sessions = listSessions({ limit: 50 });
+    const here = sessions.find((s) => s.cwd === path.resolve(session.cwd)) || sessions[0];
+    if (!here) throw new Error('No Codex session to queue into. Pass one: cx --queue <thread-id|name>.');
+    thread = here.threadId || here.sessionId;
+  }
+
+  const rendered = renderBriefing(turnsOf(session), '', { assistantLabel: 'Claude' });
+  const message = [
+    'Handing this over from Claude Code. Transcript of the conversation so far:',
+    '',
+    rendered,
+    '',
+    '--- end transcript ---',
+    '',
+    'Carry on from here.',
+  ].join('\n');
+
+  const bin = process.env.SWITCHBOARD_CODEX_BIN || 'codex';
+  const run = spawnSync(bin, ['queue', '--thread', thread, '--message', message], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  if (run.error) throw new Error(`could not run ${bin}: ${run.error.message}`);
+  if (run.status !== 0) {
+    const detail = (run.stderr || run.stdout || '').trim().split('\n').filter(Boolean).slice(-2).join(' ');
+    throw new Error(`codex queue exited ${run.status}${detail ? `: ${detail}` : '.'}`);
+  }
+  console.log(
+    `claude ${path.basename(session.source).slice(0, 8)} → queued into codex ${String(thread).slice(0, 8)}\n` +
+    '  It arrives on that session\'s next turn; Claude Code keeps running here.',
+  );
+}
+
 async function main() {
   const { flags, rest } = parse(process.argv.slice(2));
 
@@ -128,6 +194,10 @@ async function main() {
   const proc = claudeProcess();
   const session = resolveSession(cwd, proc?.tty);
   if (!session) throw new Error(`No Claude transcript found for ${cwd}.`);
+
+  // Both of these leave Claude Code running and start no new Codex thread.
+  if (flags.context) { printContext(session); return; }
+  if (flags.queue) { queueToThread(session, flags.queue === true ? rest[0] : String(flags.queue)); return; }
 
   process.stderr.write(`switchboard → codex (importing this conversation, ${session.via})…\n`);
   const { threadId, reused } = await importClaudeSession(session.source, session.cwd);
