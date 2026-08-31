@@ -48,16 +48,21 @@ thread. Re-importing the same conversation reuses that thread instead of duplica
 ## Claude desktop
 
 Claude desktop's local agent mode writes ordinary Claude Code transcripts, so those
-conversations can go to Codex too:
+conversations can be picked up from either CLI:
 
 ```bash
 cx --desktop      # list them
 cx --desktop 2    # hand conversation 2 to Codex, opened alongside
+cc --desktop 2    # resume conversation 2 here, in Claude Code
 ```
 
 The transcript is copied into `~/.claude/projects` on the way through — Codex imports only
 from there — which also makes it resumable with `claude --resume`. `--cwd DIR` resumes
-somewhere other than the session's own sandbox.
+somewhere other than the session's own sandbox; `cc --desktop` rewrites the recorded working
+directory to match, and never overwrites a copy you have since added turns to.
+
+There is no route back into Claude desktop: its conversation list is server state, not
+something on disk.
 
 The ChatGPT desktop app disables its own `/import` while it is attached to the local
 app-server daemon, which is why the sync appears to run once and then never again. This is
@@ -91,11 +96,30 @@ Threads from the ChatGPT desktop app share Codex's session store, so they are li
 selectable by the name the app shows. Bringing one over starts a normal Claude Code session,
 which the Claude desktop app lists alongside its own while it is running.
 
+Nothing has to be replaced, either. From inside Claude Code:
+
+```bash
+cx --context       # print the conversation, to paste into Codex yourself
+cx --queue         # push it into the Codex session already running here
+cx --queue <id>    # …or into one named by id or session name
+```
+
+`--queue` uses `codex queue`, so the transcript lands in a Codex TUI that is already open,
+on its next turn. Claude Code keeps running either way. `cx2cc context` is the same thing in
+the other direction.
+
 `/switchboard:import` pulls a Codex session into the Claude session you are already in,
 instead of replacing it.
 
-`/switchboard:switch` routes your next prompts to Codex and back without leaving the
-conversation — see [docs/routing.md](docs/routing.md).
+`/switchboard:switch` (or `!cx2cc switch` inside Codex) routes your next prompts to the other
+agent and back without leaving the conversation. It works from both ends; the Codex side is
+one opt-in step, because it writes to `~/.codex/hooks.json`:
+
+```bash
+./install.sh --codex-hooks
+```
+
+See [docs/routing.md](docs/routing.md).
 
 [docs/how-it-works.md](docs/how-it-works.md) covers session identification and the rest of
 the internals.

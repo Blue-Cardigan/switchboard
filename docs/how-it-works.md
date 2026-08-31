@@ -26,12 +26,27 @@ the age limit, since you asked for it explicitly.
 The wrapper only claims entries meant for it — `codex()` takes `claude` targets and vice
 versa — so the two never steal each other's handoffs.
 
+It also declines to claim anything for a non-interactive run: `codex exec`, `claude -p`,
+`--version`, and the management subcommands of both. Those are used inside scripts and by
+other agents, and replacing that shell with an agent TUI would take over a terminal nobody
+is watching. Routed turns set `SWITCHBOARD_ROUTED=1`, which the wrapper also honours.
+
+The wrapper's reload is written inline in `codex()` and `claude()` rather than in a helper.
+Some environments — Claude Code's own bash tool among them — replay captured shell functions
+selectively, keeping the wrappers and dropping everything underscore-prefixed, and a helper
+that is missing cannot restore itself.
+
 ## Claude desktop sessions
 
 Claude desktop's local agent mode runs each conversation in its own sandbox under
 `~/Library/Application Support/Claude/local-agent-mode-sessions/`, and inside that sandbox
 it writes a normal Claude Code transcript. A `local_<id>.json` sidecar beside each sandbox
 gives the title and names the transcript, which is what `cx --desktop` lists.
+
+The copy is also what makes a desktop conversation resumable in the CLI, which is what
+`cc --desktop` does. That direction rewrites the `cwd` recorded on each row, so Claude Code
+is not reading a sandbox path it is not running in; the Codex direction leaves the bytes
+untouched, because its ledger dedupes on a content hash.
 
 Codex will only import Claude sessions it finds under `~/.claude/projects`. Handed a path
 outside that, `externalAgentConfig/import` does not error — it ignores the request and
@@ -58,6 +73,17 @@ session registers itself in `~/.claude/sessions/<pid>.json` with its `sessionId`
 `claude-desktop`; the app reads that registry. So a conversation brought over from Codex
 appears in Claude desktop once it is actually resumed and running — importing the transcript
 alone is not enough.
+
+## Transcripts switchboard wrote
+
+Every transcript switchboard writes is recorded in `~/.claude/switchboard/authored.json`
+with its size and mtime. A file that still matches its record is *pristine*: switchboard
+wrote it and nobody has resumed it.
+
+That distinction matters twice. `cx` picks the newest transcript for a directory as "this
+conversation", and an unresumed import sitting in the same directory would otherwise be
+picked, handing Codex back its own words. And a desktop session already copied and then
+continued is left alone rather than refreshed, which would discard the turns added since.
 
 ## Notes
 
