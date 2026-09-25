@@ -112,6 +112,26 @@ function ledgerThreadId(sourcePath, sha) {
   return null;
 }
 
+/**
+ * Every record Codex holds for this content, whatever path it filed it under.
+ * The exact (path, sha) lookup above is the answer; this is what gets reported
+ * when there isn't one, because "finished but recorded nothing" is otherwise a
+ * dead end — Codex has already closed, and the next run hashes a different file.
+ */
+function ledgerRecordsFor(sha) {
+  const found = [];
+  for (const keys of LEDGERS) {
+    let ledger;
+    try { ledger = JSON.parse(fs.readFileSync(path.join(codexHome(), keys.file), 'utf8')); } catch { continue; }
+    for (const record of Array.isArray(ledger?.records) ? ledger.records : []) {
+      if (record?.[keys.sha] === sha && typeof record?.[keys.thread] === 'string') {
+        found.push({ file: keys.file, source: record[keys.source], thread: record[keys.thread] });
+      }
+    }
+  }
+  return found;
+}
+
 function digest(bytes) {
   return crypto.createHash('sha256').update(bytes).digest('hex');
 }
@@ -120,6 +140,24 @@ function digest(bytes) {
 // the first import for a source path, even when that file later changes. Give
 // each version its own stable, UUID-shaped filename so the ledger can identify
 // the exact conversation that was imported.
+/**
+ * Claude Code appends a row while we are reading it, so the tail of a live
+ * transcript can be half a line. Codex parses the whole file or takes none of
+ * it, and a partial last row is indistinguishable from a corrupt session.
+ */
+function completeLines(bytes) {
+  const end = bytes.lastIndexOf(0x0a);
+  if (end === -1) return bytes;
+  const tail = bytes.subarray(end + 1);
+  if (!tail.length) return bytes;
+  try {
+    JSON.parse(tail.toString('utf8'));
+    return bytes;
+  } catch {
+    return bytes.subarray(0, end + 1);
+  }
+}
+
 function importSnapshot(source, bytes, sha) {
   if (isPristineAuthored(source)) return source;
   const id = `${sha.slice(0, 8)}-${sha.slice(8, 12)}-4${sha.slice(13, 16)}-8${sha.slice(17, 20)}-${sha.slice(20, 32)}`;
@@ -148,7 +186,7 @@ export async function importClaudeSession(sourcePath, cwd) {
     throw new Error(`Codex imports Claude sessions only from ${projects}`);
   }
 
-  const bytes = fs.readFileSync(source);
+  const bytes = completeLines(fs.readFileSync(source));
   const sha = digest(bytes);
   const existing = ledgerThreadId(source, sha);
   if (existing) return { threadId: existing, reused: true };
@@ -189,6 +227,16 @@ export async function importClaudeSession(sourcePath, cwd) {
   }
 
   const threadId = ledgerThreadId(importedSource, sha);
-  if (!threadId) throw new Error('Codex reported the import finished but recorded no thread id.');
+  if (!threadId) {
+    const elsewhere = ledgerRecordsFor(sha).filter((r) => r.source !== importedSource);
+    throw new Error(
+      'Codex reported the import finished but recorded no thread for it.\n' +
+      `  imported: ${importedSource}\n` +
+      `  sha:      ${sha}\n` +
+      (elsewhere.length
+        ? `  the same content is filed under ${elsewhere.map((r) => r.source).join(', ')} — reopen it with: codex resume ${elsewhere.at(-1).thread}`
+        : `  nothing in ${LEDGERS.map((l) => l.file).join(' or ')} matches it; run Codex's own /import to see what it says`),
+    );
+  }
   return { threadId, reused: false };
 }
