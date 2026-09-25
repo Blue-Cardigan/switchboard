@@ -70,6 +70,10 @@ documented and all of it was read out of the installed bundle:
   `.project_root` file under both `~/.gemini/tmp/<slug>/` and `~/.gemini/history/<slug>/`.
   Switchboard claims a slug the same way, so Gemini adopts it rather than allocating a
   second one for the same directory.
+- The registry key keeps the path's original case on macOS — only win32 is case-folded.
+  Gemini has a second `normalizePath` elsewhere in its bundle that *does* fold on darwin;
+  copy that one and Gemini stops recognising its own key, then quietly allocates a
+  duplicate slug (`proj-1`) next to yours, and every handed-off session goes missing.
 - `--resume` takes `latest`, a 1-based index, **or a full session UUID** — which is what
   makes an id-addressed handoff possible at all.
 - Rebuilding model history drops any user turn whose trimmed text starts with `/` or `?`

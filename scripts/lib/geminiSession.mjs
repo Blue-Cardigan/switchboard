@@ -29,12 +29,15 @@ function baseDirs() {
   return [path.join(geminiDir(), 'tmp'), path.join(geminiDir(), 'history')];
 }
 
-/** Gemini's own normalisation — case-folded where the filesystem is. */
+/**
+ * Gemini's own normalisation for the project registry: resolve, and case-fold
+ * on Windows only. It does case-fold on macOS elsewhere in its codebase — copy
+ * that one by mistake and Gemini stops recognising its own key, then allocates
+ * a second slug for a directory it already had.
+ */
 function normalise(dir) {
-  const resolved = path.resolve(dir).replace(/\\/g, '/');
-  return process.platform === 'win32' || process.platform === 'darwin'
-    ? resolved.toLowerCase()
-    : resolved;
+  const resolved = path.resolve(dir);
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
 }
 
 function slugify(text) {

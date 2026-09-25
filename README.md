@@ -55,7 +55,7 @@ supported for handoff both ways and for forking; adding a fourth harness is one 
 
 zsh, Node 18+, and [Codex](https://github.com/openai/codex) 0.150+ and/or
 [Claude Code](https://docs.claude.com/en/docs/claude-code). macOS and Linux.
-[Gemini CLI](https://github.com/google-gemini/gemini-cli) 0.39+ is optional, and only
+[Gemini CLI](https://github.com/google-gemini/gemini-cli) 0.61+ is optional, and only
 needed for `sb to gemini`.
 
 ## Install
