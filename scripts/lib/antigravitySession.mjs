@@ -8,7 +8,6 @@
 // door: a seed file, opened with `agy --prompt-interactive`.
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -39,10 +38,6 @@ export function conversationPath(id) {
 
 export function sessionIdOf(source) {
   return source ? path.basename(String(source), '.db') : null;
-}
-
-export function seedsDir() {
-  return path.join(os.homedir(), '.claude', 'switchboard', 'seeds');
 }
 
 let sqlite;
@@ -184,40 +179,6 @@ export function hasSession(id) {
   return fs.existsSync(conversationPath(id));
 }
 
-function labelFromPreamble(preamble) {
-  const match = /^\[Imported from ([^\]]+)\]/.exec(String(preamble || ''));
-  return match ? match[1] : 'the other harness';
-}
-
-function sweepSeeds(dir, keep) {
-  for (const name of fs.readdirSync(dir)) {
-    const stale = path.join(dir, name);
-    try {
-      if (stale !== keep && Date.now() - fs.statSync(stale).mtimeMs > 36e5) fs.unlinkSync(stale);
-    } catch { /* someone else's to worry about */ }
-  }
-}
-
-/**
- * Stage the conversation as one Markdown file for `agy --prompt-interactive`.
- * Antigravity assigns the conversation id itself when it starts, so what comes
- * back here is the id of the seed, not of a conversation that exists yet.
- */
-export function stageSeed({ cwd, entries, preamble }) {
-  const dir = seedsDir();
-  fs.mkdirSync(dir, { recursive: true });
-  const id = crypto.randomUUID();
-  const file = path.join(dir, `${id}.md`);
-  const label = labelFromPreamble(preamble);
-
-  const body = entries.map((entry) => (
-    entry.role === 'user' ? `## You\n\n${entry.text}` : `## ${label}\n\n${entry.text}`
-  ));
-  fs.writeFileSync(file, `${[preamble, '', ...body].join('\n\n')}\n`, { mode: 0o600 });
-  sweepSeeds(dir, file);
-
-  return { id, file, cwd, entries: entries.length };
-}
 
 /** Field 1 of a step payload, for callers that want the raw step vocabulary. */
 export function stepTypes(file) {

@@ -1,6 +1,6 @@
 // Gemini CLI, as a harness switchboard can move a conversation in and out of.
 import fs from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { findAncestor } from '../proc.mjs';
 import {
   chatsDirFor, listSessions, readSession, writeSession, forkSession, sessionIdOf,
 } from '../geminiSession.mjs';
@@ -122,7 +122,7 @@ export default {
 
   /** Is this process running inside a Gemini CLI session? */
   hostEnv() {
-    return findGeminiAncestor() !== null;
+    return findAncestor(/(^|\/)gemini$/) !== null;
   },
 
   sessionIdOf(source) {
@@ -130,22 +130,3 @@ export default {
   },
 };
 
-function ps(field, pid) {
-  try {
-    return execFileSync('ps', ['-o', `${field}=`, '-p', String(pid)], { encoding: 'utf8' }).trim();
-  } catch {
-    return '';
-  }
-}
-
-/** Walk up the process tree looking for the Gemini CLI. */
-function findGeminiAncestor(startPid = process.pid, maxDepth = 12) {
-  let pid = startPid;
-  for (let i = 0; i < maxDepth; i += 1) {
-    const parent = ps('ppid', pid);
-    if (!parent || parent === '0' || parent === '1') return null;
-    if (/(^|\/)gemini$/.test(ps('comm', parent))) return Number(parent);
-    pid = Number(parent);
-  }
-  return null;
-}

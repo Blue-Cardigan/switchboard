@@ -65,8 +65,18 @@ async function main() {
     `${read.counts.user} prompt(s), ${read.counts.commands} command(s)${read.trimmed ? ', trimmed' : ''}` +
     `${written.reused ? ' (already imported)' : ''}`;
 
+  // A harness that is not installed still gets a staged handoff — the command
+  // is the same one, and it works the moment the binary is there.
+  const hint = written.hint ? `\n  ${written.hint}` : '';
+
   if (flags.print) {
-    console.log(`${line}\n  ${resumeCommand(written.id, cwd, target.id)}`);
+    console.log(`${line}\n  ${resumeCommand(written.id, cwd, target.id)}${hint}`);
+    return;
+  }
+
+  if (written.hint) {
+    // Opening a pane on a missing command just flashes an error and closes it.
+    console.log(`${line}\n  ${written.hint}\n  then: ${resumeCommand(written.id, cwd, target.id)}`);
     return;
   }
 

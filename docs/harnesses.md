@@ -2,8 +2,10 @@
 
 Switchboard used to branch on "Codex or Claude Code?" at every call site. It now asks a
 registry, so a third harness is a file in `scripts/lib/harness/` rather than an edit
-everywhere. Four are registered: `claude`, `codex`, `antigravity`, `gemini`. `sb list`
-prints them with what each one can do, and flags the legacy ones.
+everywhere. Nine are registered: `claude`, `codex`, `antigravity` and `gemini` read and
+write; `opencode`, `goose`, `crush`, `aider` and `qwen` are hand-to only, and come from one
+table rather than a file each. `sb list` prints them with what each one can do, whether it
+is installed here, and whether its flags have been exercised against a binary.
 
 ## The interface
 
@@ -121,3 +123,69 @@ was withdrawn from the Gemini CLI in September 2026.
   Resume is `agy --conversation <uuid>`, and `agy -c` continues the most recent one here.
 - Reading needs SQLite: Node 22.5+ (`node:sqlite`) or the `sqlite3` command.
   `SWITCHBOARD_AGY_HOME` overrides `~/.gemini/antigravity-cli` for tests.
+
+## Hand-to-only harnesses
+
+There are dozens of coding agents and one of switchboard's stated aims is not to care
+which one you use. Writing an adapter each is the wrong shape for that: their session
+stores are undocumented, version-bound, or both, and a format guessed today rots without
+warning. What every one of them does have is a way to start on a prompt.
+
+So `scripts/lib/harness/seeded.mjs` turns a four-line description into an adapter, and
+`scripts/lib/harness/openSource.mjs` is the table of descriptions:
+
+```js
+{
+  id: 'goose', label: 'goose', bin: 'goose',
+  install: 'curl -fsSL …/download_cli.sh | bash',
+  docs: 'https://block.github.io/goose/docs/guides/goose-cli-commands',
+  launch: ({ seed, id }) => `exec goose run --instructions ${shq(seed)} --interactive …`,
+  resumeArgv: (id) => ['goose', 'session', '--resume', '--name', id],
+}
+```
+
+`launch` returns the shell line that opens the harness on a staged seed. The transcript
+goes in as a *file* so it never has to survive a command line, and it is read at the last
+moment, by the shell, in the terminal the user is sitting in. `scripts/lib/seed.mjs` owns
+staging: a `0600` Markdown file under `~/.claude/switchboard/seeds/`, a `0700` launcher
+beside it, and a sweep of anything older than an hour.
+
+The trade is the same one Antigravity makes, and it is worth saying out loud: a seeded
+conversation arrives as one opening message, not as turns the model can see itself having
+taken. It carries the work. It is not a transplant.
+
+### The five, and what each one needed
+
+| Harness | Opening prompt | Reopen by id | Note |
+|---|---|---|---|
+| `opencode` | `--prompt` on the TUI | `--session <id>` | `opencode export`/`import` move a whole session as JSON — the better route once that format is pinned to a version |
+| `goose` | `run --instructions <file> --interactive --name …` | `session --resume --name` | the closest fit in the field: a file, interactivity afterwards, and a name to come back to |
+| `crush` | none — so `crush run` seeds and `crush --continue` opens the TUI on that session | `--session <id>` | costs one model reply to the seed |
+| `aider` | `--message-file <file>`, which answers and exits | no session store | reopened with `--restore-chat-history`, which reads `.aider.chat.history.md` in the repo |
+| `qwen` | `-i` | not wired | a Gemini CLI fork, so it inherits Gemini's flags |
+
+### Verification, honestly
+
+None of these five were installed on the machine where they were written, so their flags
+come from each project's own documentation and `sb list` says so per harness:
+
+```
+  goose        goose
+    unverified: flags from https://block.github.io/goose/docs/guides/goose-cli-commands
+    not installed: curl -fsSL …/download_cli.sh | bash
+```
+
+Setting `verified: true` in the table is a claim that someone ran `sb to <id>` against an
+installed binary and landed in a working session. Handoff stages the seed either way — a
+missing binary is reported with its install command instead of opening a pane that would
+flash an error and close.
+
+### Why not ACP
+
+Zed ships a registry of 41 agents that speak the Agent Client Protocol
+(`~/Library/Application Support/Zed/external_agents/registry/registry.json`), which is the
+real long-term answer to "every harness": one client, one protocol, no per-agent flags.
+It is not what switchboard does today because ACP starts a *new* session and streams into
+it — the seed would still be the first message — and it would put a protocol client
+between the user and their own terminal. The table above buys most of the coverage for a
+tenth of the surface. If ACP grows a way to load prior turns, that changes.

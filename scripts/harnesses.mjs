@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // What switchboard knows how to talk to, and what each of them can do.
 import { harnesses, host } from './lib/harness/index.mjs';
+import { onPath } from './lib/proc.mjs';
 
 const CAPABILITIES = [
   ['read', 'read a conversation out'],
@@ -17,5 +18,11 @@ for (const harness of Object.values(harnesses)) {
   console.log(`    can: ${can.join(', ') || 'nothing'}`);
   if (cannot.length) console.log(`    cannot: ${cannot.join(', ')}`);
   if (harness.legacy) console.log(`    legacy: ${harness.legacy}`);
+  if (harness.note) console.log(`    note: ${harness.note}`);
+  // Said plainly rather than discovered when a handoff opens on nothing.
+  if (harness.unverified) console.log(`    unverified: ${harness.unverified}`);
+  if (harness.bin && !onPath(harness.bin)) {
+    console.log(`    not installed: ${harness.install || `${harness.bin} is not on PATH`}`);
+  }
 }
 if (here) console.log(`\n* is the harness this command is running inside.`);

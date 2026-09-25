@@ -42,14 +42,24 @@ else goes through `sb`, which works from inside any registered harness:
 
 ```bash
 sb to antigravity # hand this conversation to Antigravity, opened beside it
-sb to claude      # …or to Claude Code, from Codex or Antigravity
+sb to opencode    # …or to opencode, goose, crush, aider, qwen
+sb to claude      # …or back to Claude Code, from any of them
 sb fork           # duplicate this conversation into a side chat here
-sb list           # what is registered, and what each one can do
+sb list           # what is registered, installed, and able to do what
 ```
 
-`sb to` always opens alongside and leaves the harness you are in running. Antigravity and
-Gemini CLI are both supported for handoff either way and for forking; adding a fifth
-harness is one file in `scripts/lib/harness/` — see [docs/harnesses.md](docs/harnesses.md).
+`sb to` always opens alongside and leaves the harness you are in running.
+
+Nine harnesses are registered. Four of them — Claude Code, Codex, Antigravity, Gemini CLI
+— switchboard can read *out* of as well as into, because their conversation stores are
+stable enough to parse. The five open-source agents are hand-to only: their sessions
+arrive as an opening message rather than as replayed history, which is enough to carry on
+with and is not a transplant. `sb list` marks which are installed here, and which flags
+come from a project's documentation rather than from a binary switchboard has run.
+
+Adding another is four lines in `scripts/lib/harness/openSource.mjs`, or one file in
+`scripts/lib/harness/` for a harness worth reading out of — see
+[docs/harnesses.md](docs/harnesses.md).
 
 ## Requirements
 
@@ -61,6 +71,12 @@ or the `sqlite3` command. [Gemini CLI](https://github.com/google-gemini/gemini-c
 still works for anyone holding a `GEMINI_API_KEY` or a Vertex AI project, but Google
 withdrew personal Google sign-in from it in September 2026 and points individuals at
 Antigravity, so `gemini` is registered as legacy.
+
+The open-source targets — [opencode](https://opencode.ai),
+[goose](https://block.github.io/goose), [Crush](https://github.com/charmbracelet/crush),
+[Aider](https://aider.chat) and [Qwen Code](https://github.com/QwenLM/qwen-code) — are all
+optional. Switchboard stages the handoff whether or not they are installed and tells you
+the install command; nothing needs to be present for the harnesses you do not use.
 
 ## Install
 
@@ -86,6 +102,12 @@ re-read files rather than trust the summary. Long sessions are trimmed to ~120k 
 
 **Claude Code → Codex** uses Codex's own importer, so the result is an ordinary Codex
 thread. Re-importing the same conversation reuses that thread instead of duplicating it.
+
+**Anything → an open-source agent** stages the conversation as a Markdown file and opens
+that agent on it: `opencode --prompt`, `goose run --instructions … --interactive`,
+`crush run` then `crush --continue`, `aider --message-file`, `qwen -i`. The agent starts
+the session and owns it from there, so the transcript reads as one long opening message
+rather than as turns the model can see itself having taken.
 
 **Anything → Gemini CLI** writes a session file of the kind Gemini writes itself, so
 `gemini --resume` replays it as real history. Same trade as above: prompts and replies in

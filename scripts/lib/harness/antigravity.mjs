@@ -1,24 +1,13 @@
 // Antigravity CLI (`agy`), Google's replacement for personal Gemini CLI access.
 import fs from 'node:fs';
-import path from 'node:path';
-import { execFileSync } from 'node:child_process';
-import {
-  conversationsDir, listSessions, readSession, seedsDir, sessionIdOf, stageSeed,
-} from '../antigravitySession.mjs';
+import { conversationsDir, listSessions, readSession, sessionIdOf } from '../antigravitySession.mjs';
+import { isSeed, seedScript, shq, stageSeed, writeLauncher } from '../seed.mjs';
+import { findAncestor } from '../proc.mjs';
 import { trimEvents } from '../codexRollout.mjs';
 import { eventsToEntries, buildPreamble } from '../claudeTranscript.mjs';
 
 const FROM = { name: 'Antigravity', unit: 'conversation' };
 const EDITING_TOOLS = /(write|edit|replace|create)_file|apply_patch|str_replace/i;
-
-function seedScript(id) {
-  return path.join(seedsDir(), `${id}.sh`);
-}
-
-/** Seed ids belong to a conversation Antigravity has not started yet. */
-function isSeed(id) {
-  return Boolean(id) && fs.existsSync(seedScript(id));
-}
 
 export default {
   id: 'antigravity',
@@ -98,11 +87,7 @@ export default {
    */
   write({ entries, cwd, preamble }) {
     const seed = stageSeed({ cwd, entries, preamble });
-    fs.writeFileSync(
-      seedScript(seed.id),
-      `#!/bin/sh\nexec agy "--prompt-interactive=$(cat ${JSON.stringify(seed.file)})"\n`,
-      { mode: 0o700 },
-    );
+    writeLauncher(seed.id, `exec agy "--prompt-interactive=$(cat ${shq(seed.file)})"`);
     return { id: seed.id, source: seed.file, cwd, rows: seed.entries, pending: true };
   },
 
@@ -121,7 +106,7 @@ export default {
   /** Is this process running inside an Antigravity conversation? */
   hostEnv() {
     if (process.env.ANTIGRAVITY_CONVERSATION_ID) return true;
-    return findAgyAncestor() !== null;
+    return findAncestor(/(^|\/)agy$/) !== null;
   },
 
   sessionIdOf(source) {
@@ -129,22 +114,3 @@ export default {
   },
 };
 
-function ps(field, pid) {
-  try {
-    return execFileSync('ps', ['-o', `${field}=`, '-p', String(pid)], { encoding: 'utf8' }).trim();
-  } catch {
-    return '';
-  }
-}
-
-/** Walk up the process tree looking for the agy binary. */
-function findAgyAncestor(startPid = process.pid, maxDepth = 12) {
-  let pid = startPid;
-  for (let i = 0; i < maxDepth; i += 1) {
-    const parent = ps('ppid', pid);
-    if (!parent || parent === '0' || parent === '1') return null;
-    if (/(^|\/)agy$/.test(ps('comm', parent))) return Number(parent);
-    pid = Number(parent);
-  }
-  return null;
-}

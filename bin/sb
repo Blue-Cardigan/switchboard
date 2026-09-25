@@ -2,10 +2,11 @@
 #? sb — the harness-agnostic switchboard. Run it inside any harness, as !sb.
 #?
 #?   sb to <harness>      hand this conversation to that harness and open it
-#?                        beside this one (claude, codex, antigravity, gemini)
+#?                        beside this one (claude, codex, antigravity, gemini,
+#?                        opencode, goose, crush, aider, qwen)
 #?   sb fork              duplicate this conversation into a side chat here
 #?                        --model <id> gives the copy a different model
-#?   sb list              which harnesses are registered, and what each can do
+#?   sb list              which harnesses are registered, installed, and can do what
 #?   sb where             which harness this command is running inside
 #?
 #? Add --print to any of these to see the command instead of opening anything,
