@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { isPristineAuthored, recordAuthored } from './claudeTranscript.mjs';
 
 const IMPORT_COMPLETED = 'externalAgentConfig/import/completed';
 
@@ -97,9 +98,8 @@ const LEDGERS = [
   { file: 'claude-cowork-import-history.json', source: 'sourcePath', sha: 'contentSha256', thread: 'importedThreadId' },
 ];
 
-function ledgerThreadId(sourcePath) {
+function ledgerThreadId(sourcePath, sha) {
   const canonical = fs.realpathSync(sourcePath);
-  const sha = crypto.createHash('sha256').update(fs.readFileSync(canonical)).digest('hex');
   for (const keys of LEDGERS) {
     let ledger;
     try { ledger = JSON.parse(fs.readFileSync(path.join(codexHome(), keys.file), 'utf8')); } catch { continue; }
@@ -110,6 +110,27 @@ function ledgerThreadId(sourcePath) {
     if (match) return match[keys.thread];
   }
   return null;
+}
+
+function digest(bytes) {
+  return crypto.createHash('sha256').update(bytes).digest('hex');
+}
+
+// A live Claude transcript can grow while Codex imports it. Codex also keeps
+// the first import for a source path, even when that file later changes. Give
+// each version its own stable, UUID-shaped filename so the ledger can identify
+// the exact conversation that was imported.
+function importSnapshot(source, bytes, sha) {
+  if (isPristineAuthored(source)) return source;
+  const id = `${sha.slice(0, 8)}-${sha.slice(8, 12)}-4${sha.slice(13, 16)}-8${sha.slice(17, 20)}-${sha.slice(20, 32)}`;
+  const snapshot = path.join(path.dirname(source), `${id}.jsonl`);
+  try {
+    fs.writeFileSync(snapshot, bytes, { flag: 'wx', mode: 0o600 });
+    recordAuthored(snapshot);
+  } catch (err) {
+    if (err.code !== 'EEXIST' || digest(fs.readFileSync(snapshot)) !== sha) throw err;
+  }
+  return snapshot;
 }
 
 /**
@@ -127,8 +148,14 @@ export async function importClaudeSession(sourcePath, cwd) {
     throw new Error(`Codex imports Claude sessions only from ${projects}`);
   }
 
-  const existing = ledgerThreadId(source);
+  const bytes = fs.readFileSync(source);
+  const sha = digest(bytes);
+  const existing = ledgerThreadId(source, sha);
   if (existing) return { threadId: existing, reused: true };
+
+  const importedSource = importSnapshot(source, bytes, sha);
+  const importedExisting = ledgerThreadId(importedSource, sha);
+  if (importedExisting) return { threadId: importedExisting, reused: true };
 
   const server = new AppServer(cwd);
   server.start();
@@ -151,7 +178,7 @@ export async function importClaudeSession(sourcePath, cwd) {
         description: `Transfer Claude session ${path.basename(source)}`,
         cwd: null,
         details: {
-          plugins: [], sessions: [{ path: source, cwd, title: null }],
+          plugins: [], sessions: [{ path: importedSource, cwd, title: null }],
           mcpServers: [], hooks: [], subagents: [], commands: [],
         },
       }],
@@ -161,7 +188,7 @@ export async function importClaudeSession(sourcePath, cwd) {
     server.stop();
   }
 
-  const threadId = ledgerThreadId(source);
+  const threadId = ledgerThreadId(importedSource, sha);
   if (!threadId) throw new Error('Codex reported the import finished but recorded no thread id.');
   return { threadId, reused: false };
 }

@@ -8,6 +8,7 @@ import { ROOT } from './lib/state.mjs';
 import { importClaudeSession } from './lib/toCodex.mjs';
 import { wrapperActive } from './lib/agentContext.mjs';
 import { claudeProcess, resolveSession } from './lib/claudeSession.mjs';
+import { projectDirFor } from './lib/claudeTranscript.mjs';
 import { readTurnsSince, renderBriefing } from './lib/transcript.mjs';
 import { listSessions } from './lib/codexRollout.mjs';
 import { listDesktopSessions, materialiseDesktopSession, pickDesktopSession } from './lib/claudeDesktop.mjs';
@@ -18,7 +19,7 @@ function parse(argv) {
   const rest = [];
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (arg === '--cwd' || arg === '--limit') { flags[arg.slice(2)] = argv[++i]; continue; }
+    if (arg === '--cwd' || arg === '--limit' || arg === '--session') { flags[arg.slice(2)] = argv[++i]; continue; }
     if (arg.startsWith('--')) { flags[arg.slice(2)] = true; continue; }
     rest.push(arg);
   }
@@ -138,9 +139,20 @@ async function main() {
     return;
   }
 
-  const cwd = process.cwd();
-  const proc = claudeProcess();
-  const session = resolveSession(cwd, proc?.tty);
+  const cwd = flags.cwd ? path.resolve(String(flags.cwd)) : process.cwd();
+  const proc = flags.session ? null : claudeProcess();
+  let session;
+  if (flags.session) {
+    const id = String(flags.session);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      throw new Error(`Expected a Claude session UUID after --session, got ${id}.`);
+    }
+    const source = path.join(projectDirFor(cwd), `${id}.jsonl`);
+    if (!fs.existsSync(source)) throw new Error(`Claude transcript not found: ${source}`);
+    session = { source, cwd, via: 'explicit session id' };
+  } else {
+    session = resolveSession(cwd, proc?.tty);
+  }
   if (!session) throw new Error(`No Claude transcript found for ${cwd}.`);
 
   // Both of these leave Claude Code running and start no new Codex thread.
@@ -152,6 +164,15 @@ async function main() {
   const line = `claude ${path.basename(session.source).slice(0, 8)} → codex ${threadId.slice(0, 8)}${reused ? ' (already imported)' : ''}`;
 
   if (flags.print || (!proc?.tty && !flags.alongside)) {
+    if (flags.session && !flags.print) {
+      console.log(`${line}\n  opening Codex here…`);
+      const child = spawn('codex', ['resume', threadId], { cwd: session.cwd, stdio: 'inherit' });
+      process.exitCode = await new Promise((resolve, reject) => {
+        child.on('error', reject);
+        child.on('exit', (code) => resolve(code ?? 1));
+      });
+      return;
+    }
     console.log(`${line}\n  ${resumeCommand(threadId, session.cwd, 'codex')}`);
     return;
   }

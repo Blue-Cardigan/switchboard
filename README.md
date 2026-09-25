@@ -16,6 +16,16 @@ new tab in the editor's own terminal (Zed), or a new terminal tab or window — 
 closes. `--no-quit` stages the switch without closing
 anything; `--print` just shows the resume command.
 
+If Claude Code has already exited, hand its saved session to Codex from the shell:
+
+```bash
+cx --session <claude-session-uuid>
+```
+
+This opens Codex in the same terminal. Add `--print` to get the resume command
+without opening it, or `--alongside` to open a separate terminal. Run it from
+the session's project directory, or pass `--cwd DIR`.
+
 ## Side chats
 
 Inside Claude Code, `cc --alongside` duplicates **this** conversation rather than fetching
