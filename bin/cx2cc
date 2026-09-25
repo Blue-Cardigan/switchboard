@@ -33,18 +33,22 @@ claim_here() {
   [[ "$mytty" == /dev/* ]] || return 1
   staged=$(node "$ROOT/scripts/pending.mjs" claim "$mytty" 2>/dev/null) || return 1
   [[ -n "$staged" ]] || return 1
-  local target id
+  local target id argv
   target="${staged%%$'\t'*}"
   staged="${staged#*$'\t'}"
   id="${staged%%$'\t'*}"
-  dir="${staged#*$'\t'}"
+  staged="${staged#*$'\t'}"
+  dir="${staged%%$'\t'*}"
+  argv="${staged#*$'\t'}"
   [[ -n "$id" && -d "$dir" ]] || return 1
   cd "$dir" || return 1
   if [[ "$target" == "codex" ]]; then
     print -P "%F{cyan}switchboard%f resuming the Claude conversation in Codex…"
+    [[ -n "$argv" && "$argv" != "$dir" ]] && exec ${=argv}
     exec codex resume "$id"
   fi
-  print -P "%F{cyan}switchboard%f resuming the Codex conversation in Claude Code…"
+  print -P "%F{cyan}switchboard%f resuming the conversation in ${target}…"
+  [[ -n "$argv" && "$argv" != "$dir" ]] && exec ${=argv}
   exec claude --resume "$id"
 }
 

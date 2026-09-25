@@ -24,21 +24,29 @@ if [[ -z "$SWITCHBOARD_HOME" ]]; then
 fi
 
 _switchboard_claim() {
-  local want="$1" staged target id dir tty
+  local want="$1" staged target id dir argv tty
   tty=$(ps -o tty= -p $$ 2>/dev/null | tr -d ' ')
   [[ -n "$tty" && "$tty" != '??' ]] || tty="${TTY:-$(tty 2>/dev/null)}"
   staged=$(node "$SWITCHBOARD_HOME/scripts/pending.mjs" claim "$tty" "$want" 2>/dev/null) || return 1
   [[ -n "$staged" ]] || return 1
   target="${staged%%$'\t'*}"; staged="${staged#*$'\t'}"
-  id="${staged%%$'\t'*}"; dir="${staged#*$'\t'}"
+  id="${staged%%$'\t'*}"; staged="${staged#*$'\t'}"
+  dir="${staged%%$'\t'*}"; argv="${staged#*$'\t'}"
   [[ -n "$id" && -d "$dir" ]] || return 1
   cd "$dir" || return 1
-  if [[ "$target" == "codex" ]]; then
-    print -P "%F{cyan}switchboard%f resuming this conversation in Codex…"
+  print -P "%F{cyan}switchboard%f resuming this conversation in ${target}…"
+  # The harness adapter names the command; older staged entries predate that
+  # field, so fall back to the two switchboard always knew.
+  if [[ -n "$argv" && "$argv" != "$dir" ]]; then
+    exec ${=argv}
+  elif [[ "$target" == "codex" ]]; then
     exec codex resume "$id"
+  elif [[ "$target" == "claude" ]]; then
+    exec claude --resume "$id"
+  else
+    print -u2 "switchboard: staged entry names harness '$target', which this install does not know."
+    return 1
   fi
-  print -P "%F{cyan}switchboard%f resuming this conversation in Claude Code…"
-  exec claude --resume "$id"
 }
 
 # Reloading is done inline in each wrapper below, not through a helper. Some

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { get } from './harness/index.mjs';
 
 function appleQuote(text) {
   return text.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -12,10 +13,9 @@ function shellQuote(text) {
   return `'${String(text).replace(/'/g, `'\\''`)}'`;
 }
 
-/** The shell one-liner that reopens a session, for either agent. */
+/** The shell one-liner that reopens a session, in whichever harness owns it. */
 export function resumeCommand(sessionId, cwd, agent = 'claude') {
-  const resume = agent === 'codex' ? `codex resume ${sessionId}` : `claude --resume ${sessionId}`;
-  return `cd ${shellQuote(cwd)} && ${resume}`;
+  return `cd ${shellQuote(cwd)} && ${get(agent).resumeArgv(sessionId).join(' ')}`;
 }
 
 function run(cmd, args) {

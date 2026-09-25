@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 // Staging point for an in-place handoff. The agent being left writes here; the
 // shell that launched it claims the entry once that agent exits.
-//   stage <tty> <target> <id> <cwd>     target = claude | codex
-//   claim <tty> [expectedTarget] [--any-age]   prints "<target>\t<id>\t<cwd>"
+//   stage <tty> <target> <id> <cwd>     target = any registered harness
+//   claim <tty> [expectedTarget] [--any-age]   prints "<target>\t<id>\t<cwd>\t<argv>"
 //   peek  <tty>                         same, without consuming the entry
+//
+// The argv field is how the shell reopens the conversation without knowing
+// which harnesses exist: it execs what the harness adapter names.
 //
 // The age limit guards the automatic path only: a shell wrapper claiming on
 // agent exit must not resurrect a handoff the user abandoned hours ago. When
@@ -12,6 +15,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT } from './lib/state.mjs';
+import { harnesses } from './lib/harness/index.mjs';
 
 const DIR = path.join(ROOT, 'pending');
 const MAX_AGE_MS = 30 * 60 * 1000;
@@ -36,7 +40,8 @@ if (verb === 'stage') {
     process.exit(0);
   }
   if (verb === 'claim') { try { fs.unlinkSync(file); } catch { /* best effort */ } }
-  process.stdout.write(`${data.target}\t${data.id}\t${data.cwd}\n`);
+  const argv = harnesses[data.target]?.resumeArgv(data.id) ?? [];
+  process.stdout.write(`${data.target}\t${data.id}\t${data.cwd}\t${argv.join(' ')}\n`);
 } else {
   console.error('usage: pending.mjs stage|claim|peek');
   process.exit(1);

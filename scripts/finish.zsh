@@ -17,7 +17,7 @@ _switchboard_staged() {
 }
 
 _switchboard_finish() {
-  local staged target id dir tty
+  local staged target id dir argv tty
   tty=$(_switchboard_tty)
   staged=$(node "$SB_ROOT/scripts/pending.mjs" claim "$tty" --any-age 2>/dev/null)
   if [[ -z "$staged" ]]; then
@@ -26,16 +26,24 @@ _switchboard_finish() {
     return 1
   fi
   target="${staged%%$'\t'*}"; staged="${staged#*$'\t'}"
-  id="${staged%%$'\t'*}"; dir="${staged#*$'\t'}"
+  id="${staged%%$'\t'*}"; staged="${staged#*$'\t'}"
+  dir="${staged%%$'\t'*}"; argv="${staged#*$'\t'}"
   if [[ -z "$id" || ! -d "$dir" ]]; then
     print -u2 "switchboard: staged entry for $tty was unusable ($id / $dir)."
     return 1
   fi
   cd "$dir" || return 1
-  if [[ "$target" == codex ]]; then
-    print -P "%F{cyan}switchboard%f resuming this conversation in Codex…"
+  print -P "%F{cyan}switchboard%f resuming this conversation in ${target}…"
+  # The harness adapter names the command; older staged entries predate that
+  # field, so fall back to the two switchboard always knew.
+  if [[ -n "$argv" && "$argv" != "$dir" ]]; then
+    exec ${=argv}
+  elif [[ "$target" == codex ]]; then
     exec codex resume "$id"
+  elif [[ "$target" == claude ]]; then
+    exec claude --resume "$id"
+  else
+    print -u2 "switchboard: staged entry names harness '$target', which this install does not know."
+    return 1
   fi
-  print -P "%F{cyan}switchboard%f resuming this conversation in Claude Code…"
-  exec claude --resume "$id"
 }
