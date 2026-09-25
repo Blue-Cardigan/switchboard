@@ -30,6 +30,13 @@ export default {
   label: 'Gemini CLI',
   bin: 'gemini',
 
+  // Google withdrew personal Google sign-in from this client in September 2026
+  // and points individuals at Antigravity instead, so a fresh install of the
+  // Gemini CLI cannot be signed into without an API key or a Vertex project.
+  // The adapter still works — anyone holding one of those keys keeps it — but
+  // `antigravity` is the Google harness switchboard reaches for now.
+  legacy: 'superseded by antigravity; needs GEMINI_API_KEY or Vertex AI to sign in',
+
   // Gemini resumes by session id and rebuilds model history from the file it
   // resumes, so everything switchboard needs is on disk. Hooks exist but use
   // Claude Code's vocabulary rather than being wired here yet.

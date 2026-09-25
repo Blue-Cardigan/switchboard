@@ -58,7 +58,10 @@ async function main() {
   });
 
   const from = live.id ? `${source.id} ${live.id.slice(0, 8)}` : `this ${source.label} conversation`;
-  const line = `${from} → ${target.id} ${written.id.slice(0, 8)} · ` +
+  // A harness switchboard cannot write a session file for gets the conversation
+  // as its opening prompt instead, and mints its own id when it starts.
+  const into = written.pending ? `${target.id} (new conversation)` : `${target.id} ${written.id.slice(0, 8)}`;
+  const line = `${from} → ${into} · ` +
     `${read.counts.user} prompt(s), ${read.counts.commands} command(s)${read.trimmed ? ', trimmed' : ''}` +
     `${written.reused ? ' (already imported)' : ''}`;
 

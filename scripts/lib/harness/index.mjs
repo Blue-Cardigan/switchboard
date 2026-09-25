@@ -3,10 +3,11 @@
 // to every call site.
 import claude from './claude.mjs';
 import codex from './codex.mjs';
+import antigravity from './antigravity.mjs';
 import gemini from './gemini.mjs';
 import { currentAgent } from '../agentContext.mjs';
 
-const REGISTERED = [claude, codex, gemini];
+const REGISTERED = [claude, codex, antigravity, gemini];
 
 export const harnesses = Object.freeze(
   Object.fromEntries(REGISTERED.map((h) => [h.id, h])),

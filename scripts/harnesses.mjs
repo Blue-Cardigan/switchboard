@@ -13,8 +13,9 @@ const here = host();
 for (const harness of Object.values(harnesses)) {
   const can = CAPABILITIES.filter(([key]) => harness.capabilities[key]).map(([, text]) => text);
   const cannot = CAPABILITIES.filter(([key]) => !harness.capabilities[key]).map(([, text]) => text);
-  console.log(`${harness.id === here?.id ? '*' : ' '} ${harness.id.padEnd(8)} ${harness.label}`);
+  console.log(`${harness.id === here?.id ? '*' : ' '} ${harness.id.padEnd(12)} ${harness.label}`);
   console.log(`    can: ${can.join(', ') || 'nothing'}`);
   if (cannot.length) console.log(`    cannot: ${cannot.join(', ')}`);
+  if (harness.legacy) console.log(`    legacy: ${harness.legacy}`);
 }
 if (here) console.log(`\n* is the harness this command is running inside.`);

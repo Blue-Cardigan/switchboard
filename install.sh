@@ -72,7 +72,7 @@ command -v node >/dev/null 2>&1 || { warn "node not found — switchboard needs 
 command -v zsh  >/dev/null 2>&1 || { warn "zsh not found — the in-place handoff needs zsh"; exit 1; }
 command -v codex  >/dev/null 2>&1 || warn "codex not on PATH — install it before using cc"
 command -v claude >/dev/null 2>&1 || warn "claude not on PATH — install it before using cx"
-command -v gemini >/dev/null 2>&1 || warn "gemini not on PATH — install it before using sb to gemini"
+command -v agy >/dev/null 2>&1 || warn "agy not on PATH — install it before using sb to antigravity"
 
 # 1. Commands.
 mkdir -p "$HOME/.local/bin"

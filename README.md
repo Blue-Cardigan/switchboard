@@ -41,22 +41,26 @@ close the agent you are in and give the same terminal back as the other one. Eve
 else goes through `sb`, which works from inside any registered harness:
 
 ```bash
-sb to gemini      # hand this conversation to Gemini CLI, opened beside it
-sb to claude      # …or to Claude Code, from Codex or Gemini
+sb to antigravity # hand this conversation to Antigravity, opened beside it
+sb to claude      # …or to Claude Code, from Codex or Antigravity
 sb fork           # duplicate this conversation into a side chat here
 sb list           # what is registered, and what each one can do
 ```
 
-`sb to` always opens alongside and leaves the harness you are in running. Gemini CLI is
-supported for handoff both ways and for forking; adding a fourth harness is one file in
-`scripts/lib/harness/` — see [docs/harnesses.md](docs/harnesses.md).
+`sb to` always opens alongside and leaves the harness you are in running. Antigravity and
+Gemini CLI are both supported for handoff either way and for forking; adding a fifth
+harness is one file in `scripts/lib/harness/` — see [docs/harnesses.md](docs/harnesses.md).
 
 ## Requirements
 
 zsh, Node 18+, and [Codex](https://github.com/openai/codex) 0.150+ and/or
 [Claude Code](https://docs.claude.com/en/docs/claude-code). macOS and Linux.
-[Gemini CLI](https://github.com/google-gemini/gemini-cli) 0.61+ is optional, and only
-needed for `sb to gemini`.
+[Antigravity](https://antigravity.google) (`agy`) is optional, and only needed for
+`sb to antigravity`; reading an Antigravity conversation back out also needs Node 22.5+
+or the `sqlite3` command. [Gemini CLI](https://github.com/google-gemini/gemini-cli) 0.61+
+still works for anyone holding a `GEMINI_API_KEY` or a Vertex AI project, but Google
+withdrew personal Google sign-in from it in September 2026 and points individuals at
+Antigravity, so `gemini` is registered as legacy.
 
 ## Install
 
