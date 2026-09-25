@@ -151,7 +151,9 @@ export function writeTranscript({ cwd, entries, preamble, gitBranch = '', versio
         session_id: sessionId,
         requestId: 'req_codex_import',
         message: {
-          model: 'claude-opus-5',
+          // No `model` key: Claude Code adopts the model named on the last
+          // assistant row when resuming, so naming one here pins the resumed
+          // session to it instead of the user's current default.
           id: `msg_${uuid.replace(/-/g, '').slice(0, 24)}`,
           type: 'message',
           role: 'assistant',
