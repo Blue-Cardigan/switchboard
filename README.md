@@ -16,15 +16,18 @@ new tab in the editor's own terminal (Zed), or a new terminal tab or window — 
 closes. `--no-quit` stages the switch without closing
 anything; `--print` just shows the resume command.
 
-If Claude Code has already exited, hand its saved session to Codex from the shell:
+During a Claude Code session, `!id` prints its UUID. If Claude has already
+exited, hand its saved session to Codex from the shell:
 
 ```bash
-cx --session <claude-session-uuid>
+cx 01234567-89ab-4cde-8fab-0123456789ab
 ```
 
 This opens Codex in the same terminal. Add `--print` to get the resume command
 without opening it, or `--alongside` to open a separate terminal. Run it from
 the session's project directory, or pass `--cwd DIR`.
+The installed `id` command delegates to the system `id` outside an agent or
+whenever arguments are supplied (for example, `id -u`).
 
 Claude → Codex imports keep the opening request and recent conversation, up to
 120,000 characters. Tool calls and results, thinking, shell UI echoes, and
@@ -104,7 +107,7 @@ git clone https://github.com/Blue-Cardigan/switchboard.git ~/.claude/skills/swit
 Then open a new terminal. Clone wherever you like — the path above just saves a symlink.
 
 The installer is idempotent, backs up what it edits, and refuses to overwrite anything it
-does not own. It adds `~/.local/bin/{cc,cx,cx2cc,sb}`,
+does not own. It adds `~/.local/bin/{cc,cx,cx2cc,sb,id}`,
 `~/.config/switchboard/codex-handoff.zsh`, one `source` line in `~/.zshrc`, and a
 `~/.claude/skills/switchboard` symlink so Claude Code finds the plugin.
 

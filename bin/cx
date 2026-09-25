@@ -10,8 +10,8 @@
 #?      cx --desktop      list conversations from Claude desktop's local agent mode
 #?      cx --desktop 2    hand desktop conversation 2 to Codex, opened alongside
 #?                        (--print to just show the command, --cwd DIR to resume elsewhere)
-#?      cx --session UUID hand a closed Claude Code session to Codex by id
-#?                        (--print to show its resume command)
+#?      cx UUID         hand a closed Claude Code session to Codex by id
+#?                      (--print to show its resume command)
 #?
 #?      cx --context      print this conversation as text, to paste into Codex yourself
 #?      cx --queue        push it into the Codex session already running here
@@ -25,17 +25,21 @@ ROOT="${SELF:h}/.."
 case "$1" in -h|--help) grep '^#?' "$SELF" | sed 's/^#?\ \{0,1\}//'; exit 0 ;; esac
 SB_ROOT="$ROOT"
 source "$ROOT/scripts/finish.zsh"
+NAMED=0
+for a in "$@"; do
+  [[ "$a" =~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' ]] && NAMED=1
+done
 # Typed at a shell prompt with a handoff already waiting here? Finish that one
 # rather than trying to start a new one. This is what makes cc/cx work in a
 # terminal whose shell never sourced the wrapper. --desktop is always a fresh
 # import, so it never claims a staged handoff.
-if [[ " $* " != *" --desktop "* && " $* " != *" --session "* && " $* " != *" --context "* && " $* " != *" --queue "* && "$(node "$ROOT/scripts/context.mjs")" != claude && -n "$(_switchboard_staged)" ]]; then
+if [[ $NAMED -eq 0 && " $* " != *" --desktop "* && " $* " != *" --session "* && " $* " != *" --context "* && " $* " != *" --queue "* && "$(node "$ROOT/scripts/context.mjs")" != claude && -n "$(_switchboard_staged)" ]]; then
   _switchboard_finish
   exit $?
 fi
 args=()
 # --alongside adds a session rather than taking this one over, so nothing closes.
-if [[ " $* " != *" --no-quit "* && " $* " != *" --alongside "* && " $* " != *" --desktop "* && " $* " != *" --session "* && " $* " != *" --context "* && " $* " != *" --queue "* ]]; then
+if [[ $NAMED -eq 0 && " $* " != *" --no-quit "* && " $* " != *" --alongside "* && " $* " != *" --desktop "* && " $* " != *" --session "* && " $* " != *" --context "* && " $* " != *" --queue "* ]]; then
   args+=(--quit)
 fi
 for a in "$@"; do [[ "$a" == "--no-quit" ]] || args+=("$a"); done

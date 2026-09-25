@@ -6,7 +6,7 @@
 #   ./install.sh --uninstall    remove everything it added
 #
 # What it touches, and nothing else:
-#   ~/.local/bin/{cc,cx,cx2cc}                    symlinks to bin/
+#   ~/.local/bin/{cc,cx,cx2cc,sb,id}              symlinks to bin/
 #   ~/.config/switchboard/codex-handoff.zsh       symlink to shell/
 #   ~/.zshrc                                      one `source` line (backed up)
 #   ~/.claude/skills/switchboard                  symlink, so Claude Code loads the plugin
@@ -50,7 +50,7 @@ fi
 if [ "${1:-}" = "--uninstall" ]; then
   printf 'Removing switchboard...\n'
   node "$REPO/scripts/install-codex-hook.mjs" remove 2>/dev/null || true
-  for c in cc cx cx2cc sb; do
+  for c in cc cx cx2cc sb id; do
     if ours "$HOME/.local/bin/$c"; then rm -f "$HOME/.local/bin/$c"; say "removed ~/.local/bin/$c"; fi
   done
   if ours "$WRAPPER"; then rm -f "$WRAPPER"; say "removed $WRAPPER"; fi
@@ -76,7 +76,7 @@ command -v agy >/dev/null 2>&1 || warn "agy not on PATH — install it before us
 
 # 1. Commands.
 mkdir -p "$HOME/.local/bin"
-for c in cc cx cx2cc sb; do
+for c in cc cx cx2cc sb id; do
   target="$HOME/.local/bin/$c"
   if [ -e "$target" ] && ! ours "$target"; then
     warn "$target already exists and is not ours — skipping (remove it and re-run)"

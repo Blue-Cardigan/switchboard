@@ -139,6 +139,11 @@ async function main() {
     return;
   }
 
+  // Like `cc <thread>`, a positional identifier selects a saved conversation.
+  // Keep --session as an alias for terminals that already use it.
+  if (!flags.session && !flags.queue && rest.length) flags.session = rest.shift();
+  if (rest.length && !flags.queue) throw new Error(`Unexpected argument: ${rest[0]}`);
+
   const cwd = flags.cwd ? path.resolve(String(flags.cwd)) : process.cwd();
   const proc = flags.session ? null : claudeProcess();
   let session;

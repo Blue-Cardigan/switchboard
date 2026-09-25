@@ -1,0 +1,10 @@
+#!/bin/zsh
+# In a Claude or Codex shell escape, bare `id` prints the conversation UUID.
+# Preserve the system utility for arguments and outside an agent session.
+if (( $# )); then exec /usr/bin/id "$@"; fi
+SELF="${0:A}"
+ROOT="${SELF:h}/.."
+node "$ROOT/scripts/session-id.mjs"
+rc=$?
+if (( rc == 3 )); then exec /usr/bin/id; fi
+exit $rc
