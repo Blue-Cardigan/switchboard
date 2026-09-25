@@ -11,9 +11,28 @@ Same terminal pane, no new window, so it works in Zed, tmux or anywhere else. `!
 no Codex credit — rescuing a session that has run out is the point.
 
 Each command converts the conversation, closes the agent you are leaving, and reopens the
-other one on it. `--alongside` keeps both instead: the other agent opens in a tmux split,
-or a new tab or window, and nothing closes. `--no-quit` stages the switch without closing
+other one on it. `--alongside` keeps both instead: the other agent opens in a tmux split, a
+new tab in the editor's own terminal (Zed), or a new terminal tab or window — and nothing
+closes. `--no-quit` stages the switch without closing
 anything; `--print` just shows the resume command.
+
+## Side chats
+
+Inside Claude Code, `cc --alongside` duplicates **this** conversation rather than fetching
+another one: a second session opens beside it with everything the first one knows, and both
+keep running.
+
+```bash
+cc --alongside            # fork this conversation into a side chat
+cc --fork --model claude-haiku-4-5   # …and answer it with a cheaper model
+cc --fork --print         # just show the resume command
+```
+
+The copy is the transcript, row for row — tool calls and all — so the fork is the
+conversation, not a summary of it. The two diverge from that point; nothing merges them back.
+
+`cc` with a Codex session named (`cc 3`, `cc --last`, `cc "thread name"`) still brings that
+one over, and `cx --alongside` still opens the same conversation in Codex beside you.
 
 ## Requirements
 

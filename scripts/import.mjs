@@ -14,7 +14,7 @@ import { eventsToEntries, buildPreamble, writeTranscript } from './lib/claudeTra
 import { desktopRoot, listDesktopSessions, materialiseDesktopSession, pickDesktopSession } from './lib/claudeDesktop.mjs';
 import { detectCurrentSession, findCodexAncestor, openRollouts, resolveCodexTty } from './lib/currentSession.mjs';
 import { ROOT } from './lib/state.mjs';
-import { wrapperActive } from './lib/agentContext.mjs';
+import { currentAgent, wrapperActive } from './lib/agentContext.mjs';
 import { openAlongside, openInTerminal, resumeCommand } from './lib/launch.mjs';
 
 function parse(argv) {
@@ -155,7 +155,12 @@ async function handoff(verb, flags, sessions, cwd, rest = []) {
     }
 
     const how = alongside ? openAlongside(written.sessionId, dir) : (openInTerminal(written.sessionId, dir) && 'opened a new Terminal window');
-    if (how) console.log(`${line}\n  ${how}${alongside ? ' — Codex is still running here' : ''}.`);
+    // Say what is still running *here*, which is not always Codex: this command
+    // is also reachable from inside Claude Code and from a bare shell.
+    const host = currentAgent();
+    const kept = host === 'codex' ? ' — Codex is still running here'
+      : host === 'claude' ? ' — this Claude Code session is untouched' : '';
+    if (how) console.log(`${line}\n  ${how}${alongside ? kept : ''}.`);
     else console.log(`${line}\n  nothing here can open a pane; run this yourself:\n  ${resumeCommand(written.sessionId, dir)}`);
   }
 
@@ -177,7 +182,9 @@ async function handoff(verb, flags, sessions, cwd, rest = []) {
       '\ncomes back as Claude Code by itself; otherwise run  cc  at the prompt.',
     );
   } else if (verb === 'handoff' && !flags.print) {
-    console.log('\nThis Codex session is untouched. Close it with /quit when you are ready.');
+    console.log(currentAgent() === 'codex'
+      ? '\nThis Codex session is untouched. Close it with /quit when you are ready.'
+      : '\nThat Codex session is untouched, and nothing here was closed.');
   }
 }
 

@@ -8,6 +8,10 @@
 #?      cc --print      show the command instead of switching
 #?      cc --no-quit    stage it but leave Codex running (exit it yourself)
 #?
+#?      cc --fork       inside Claude Code: duplicate THIS conversation into a
+#?                      second one beside it (implied by --alongside), so both run
+#?                      --model <id> gives the copy a different model
+#?
 #?      cc --desktop      list conversations from Claude desktop's local agent mode
 #?      cc --desktop 2    resume desktop conversation 2 here, in Claude Code
 #?                        (--print to just show the command, --cwd DIR to resume elsewhere)
@@ -47,6 +51,36 @@ if [[ " $* " == *" --desktop "* ]]; then
   fi
   print -r -- "$OUT"
   exit 0
+fi
+
+HOST="$(node "$ROOT/scripts/context.mjs")"
+# Was a Codex session actually named? Anything that is not a flag selects one.
+NAMED=0
+for a in "$@"; do [[ "$a" == --* ]] || NAMED=1; done
+if [[ " $* " == *" --here "* || " $* " == *" --last "* ]]; then NAMED=1; fi
+
+# Inside Claude Code with nothing named, "this conversation" is the one running
+# here — not the newest Codex thread in this directory. Reaching for that is how
+# you end up staring at a conversation you did not ask for.
+if [[ "$HOST" == claude && $NAMED -eq 0 ]]; then
+  if [[ " $* " == *" --alongside "* || " $* " == *" --fork "* ]]; then
+    fargs=()
+    for a in "$@"; do case "$a" in --alongside|--fork) ;; *) fargs+=("$a") ;; esac; done
+    exec node "$ROOT/scripts/fork.mjs" "${fargs[@]}"
+  fi
+  print -r -- "cc: you are already in Claude Code, and no Codex session was named.
+
+  cc --alongside   fork this conversation into a side chat beside it
+  cx               hand this conversation to Codex instead
+  cc --last        bring the newest Codex session here
+  cc <n>           pick one from  cx2cc list"
+  exit 1
+fi
+
+if [[ " $* " == *" --fork "* ]]; then
+  print -r -- "cc: --fork duplicates a Claude Code conversation, and this is Codex.
+Use  cc --alongside  to open this thread in Claude Code without closing Codex."
+  exit 1
 fi
 
 args=(handoff --replace)

@@ -7,7 +7,7 @@ import { execFileSync, spawnSync, spawn } from 'node:child_process';
 import { ROOT } from './lib/state.mjs';
 import { importClaudeSession } from './lib/toCodex.mjs';
 import { wrapperActive } from './lib/agentContext.mjs';
-import { isPristineAuthored, projectDirFor } from './lib/claudeTranscript.mjs';
+import { claudeProcess, resolveSession } from './lib/claudeSession.mjs';
 import { readTurnsSince, renderBriefing } from './lib/transcript.mjs';
 import { listSessions } from './lib/codexRollout.mjs';
 import { listDesktopSessions, materialiseDesktopSession, pickDesktopSession } from './lib/claudeDesktop.mjs';
@@ -23,58 +23,6 @@ function parse(argv) {
     rest.push(arg);
   }
   return { flags, rest };
-}
-
-function ps(field, pid) {
-  try { return execFileSync('ps', ['-o', `${field}=`, '-p', String(pid)], { encoding: 'utf8' }).trim(); }
-  catch { return ''; }
-}
-
-/** The Claude Code process that owns this shell, and the terminal it holds. */
-function claudeProcess() {
-  let pid = process.pid;
-  for (let i = 0; i < 12; i += 1) {
-    const parent = ps('ppid', pid);
-    if (!parent || parent === '0' || parent === '1') return null;
-    if (/claude/.test(ps('comm', parent))) {
-      const tty = ps('tty', parent);
-      return { pid: Number(parent), tty: tty && tty !== '??' ? tty.replace(/^\/dev\//, '') : null };
-    }
-    pid = Number(parent);
-  }
-  return null;
-}
-
-/** Newest transcript written for this directory — the running session, in practice. */
-function newestTranscript(cwd) {
-  const dir = projectDirFor(cwd);
-  let best = null;
-  let names;
-  try { names = fs.readdirSync(dir).filter((f) => f.endsWith('.jsonl')); } catch { return null; }
-  for (const name of names) {
-    const full = path.join(dir, name);
-    // A transcript switchboard wrote for an import, which nobody has resumed, is
-    // not this conversation. Handing one back would return Codex its own words.
-    if (isPristineAuthored(full)) continue;
-    let stat;
-    try { stat = fs.statSync(full); } catch { continue; }
-    if (!best || stat.mtimeMs > best.mtimeMs) best = { path: full, mtimeMs: stat.mtimeMs };
-  }
-  return best?.path ?? null;
-}
-
-function resolveSession(cwd, tty) {
-  if (tty) {
-    try {
-      const rec = JSON.parse(fs.readFileSync(path.join(ROOT, 'sessions', `${tty}.json`), 'utf8'));
-      if (rec.transcriptPath && fs.existsSync(rec.transcriptPath)) {
-        return { source: rec.transcriptPath, cwd: rec.cwd || cwd, via: 'SessionStart hook' };
-      }
-    } catch { /* fall through */ }
-  }
-  const source = newestTranscript(cwd);
-  if (source) return { source, cwd, via: 'newest transcript for this directory' };
-  return null;
 }
 
 function ago(ms) {

@@ -94,3 +94,26 @@ continued is left alone rather than refreshed, which would discard the turns add
   possible at all.
 - Consecutive same-role turns are merged on import, so a long Codex session can arrive as
   noticeably fewer, longer turns than it had.
+
+## Opening a session beside the one you are in
+
+`--alongside` tries, in order: a tmux split, a new tab in Zed's integrated terminal, an
+iTerm tab, a Terminal.app window, then the usual Linux terminals. Each returns a short
+description, and `null` means nothing here could be driven, so the caller prints the resume
+command instead.
+
+Zed is the odd one out. Its CLI cannot open a terminal, so switchboard drives the editor's
+own `workspace::NewTerminal` binding (`ctrl-shift-\``) through System Events and types the
+path of a staged one-shot script into the tab that opens — typing a path is far more
+reliable than keystroking a whole command line. The script `cd`s, execs the agent and
+deletes itself; anything never typed is swept after an hour. This needs Accessibility and
+Automation permission, and macOS prompts for both the first time. Without them osascript
+exits non-zero, `openInZed` returns false, and the next fallback takes over.
+
+## Forking a conversation
+
+`cc --alongside` inside Claude Code copies the running transcript to a new session id and
+opens that. Rows are copied verbatim rather than rebuilt, so tool calls and images survive
+and the fork inherits the parent's model unless `--model` overrides it. `sessionId`,
+`session_id` and `cwd` are rewritten per row; the copy is recorded in `authored.json`, which
+keeps an unresumed fork from being mistaken for "the conversation running here" later.
