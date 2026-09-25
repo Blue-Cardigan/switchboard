@@ -55,13 +55,13 @@ function normalise(entries) {
 }
 
 /** Fold the shell/file activity trail into the assistant turn it belongs to. */
-export function eventsToEntries(events) {
+export function eventsToEntries(events, { label = 'Codex' } = {}) {
   const entries = [];
   let pending = [];
 
   const flushInto = (target) => {
     if (!pending.length) return '';
-    const block = `\n\n[Codex activity]\n${pending.join('\n')}`;
+    const block = `\n\n[${label} activity]\n${pending.join('\n')}`;
     pending = [];
     return target ? block : block.trim();
   };
@@ -79,20 +79,20 @@ export function eventsToEntries(events) {
   return normalise(entries);
 }
 
-export function buildPreamble(meta, counts, truncated) {
+export function buildPreamble(meta, counts, truncated, from = { name: 'Codex', unit: 'thread' }) {
   const lines = [
-    '[Imported from Codex]',
+    `[Imported from ${from.name}]`,
     '',
-    `This conversation started in Codex${meta.model ? ` on ${meta.model}` : ''}` +
+    `This conversation started in ${from.name}${meta.model ? ` on ${meta.model}` : ''}` +
       `${meta.startedAt ? `, ${meta.startedAt.slice(0, 16).replace('T', ' ')}` : ''}` +
-      `${meta.sessionId ? ` (thread ${meta.sessionId.slice(0, 8)})` : ''}, working in ${meta.cwd || 'an unknown directory'}.`,
-    `Codex ran ${counts.commands} command(s) and edited files ${counts.fileChanges} time(s) across ` +
+      `${meta.sessionId ? ` (${from.unit} ${meta.sessionId.slice(0, 8)})` : ''}, working in ${meta.cwd || 'an unknown directory'}.`,
+    `${from.name} ran ${counts.commands} command(s) and edited files ${counts.fileChanges} time(s) across ` +
       `${counts.user} prompt(s) and ${counts.assistant} repl(ies).` +
       (truncated ? ' The middle of the session was dropped for length; the opening and the recent tail are below.' : ''),
     '',
-    'The assistant turns that follow were written by Codex, not by you. Treat them as established',
+    `The assistant turns that follow were written by ${from.name}, not by you. Treat them as established`,
     'context and honour any commitments in them, but never describe that work as something you did.',
-    'Shell commands and edits are summarised as [Codex activity]; their full output is not preserved,',
+    `Shell commands and edits are summarised as [${from.name} activity]; their full output is not preserved,`,
     'so re-read files before relying on their contents. Continue the work from here.',
     '',
     '--- imported conversation follows ---',

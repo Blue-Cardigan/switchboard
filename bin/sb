@@ -1,0 +1,34 @@
+#!/bin/zsh
+#? sb — the harness-agnostic switchboard. Run it inside any harness, as !sb.
+#?
+#?   sb to <harness>      hand this conversation to that harness and open it
+#?                        beside this one (claude, codex, gemini)
+#?   sb fork              duplicate this conversation into a side chat here
+#?                        --model <id> gives the copy a different model
+#?   sb list              which harnesses are registered, and what each can do
+#?   sb where             which harness this command is running inside
+#?
+#? Add --print to any of these to see the command instead of opening anything,
+#? and --cwd DIR to work on a different directory.
+#?
+#? cc and cx still own the Claude Code ↔ Codex crossing: only they can close
+#? the harness you are in and give the same terminal back as the other one.
+SELF="${0:A}"
+ROOT="${SELF:h}/.."
+
+case "$1" in
+  -h|--help|'') grep '^#?' "$SELF" | sed 's/^#?\ \{0,1\}//'; exit 0 ;;
+esac
+
+cmd="$1"; shift
+
+case "$cmd" in
+  to)    exec node "$ROOT/scripts/handoff.mjs" --to "$@" ;;
+  fork)  exec node "$ROOT/scripts/fork.mjs" "$@" ;;
+  list)  exec node "$ROOT/scripts/harnesses.mjs" "$@" ;;
+  where) exec node "$ROOT/scripts/context.mjs" ;;
+  *)
+    print -r -- "sb: unknown command \"$cmd\". Try: sb --help" >&2
+    exit 1
+    ;;
+esac

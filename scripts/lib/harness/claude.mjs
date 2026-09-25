@@ -2,7 +2,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { liveSession, forkTranscript } from '../claudeSession.mjs';
-import { writeTranscript, projectDirFor } from '../claudeTranscript.mjs';
+import { writeTranscript, projectDirFor, buildPreamble } from '../claudeTranscript.mjs';
+import { readTurnsSince } from '../transcript.mjs';
 
 export default {
   id: 'claude',
@@ -24,6 +25,40 @@ export default {
   live(cwd) {
     const found = liveSession(cwd);
     return found && { id: null, source: found.source, cwd: found.cwd || cwd, via: found.via };
+  },
+
+  /** Turns of a Claude conversation, in the shape every adapter passes around. */
+  read(session, { full = false, budget = 120000 } = {}) {
+    const { turns } = readTurnsSince(session.source, 0);
+    const counts = {
+      user: turns.filter((t) => t.role === 'user').length,
+      assistant: turns.filter((t) => t.role === 'assistant').length,
+      commands: turns.filter((t) => /\[used \w+\]/.test(t.text)).length,
+      fileChanges: turns.filter((t) => /\[used (Edit|Write|NotebookEdit)\]/.test(t.text)).length,
+    };
+
+    // Oldest turns go first when it will not fit: the tail is what the next
+    // harness needs to carry on, and the opening is already in the preamble.
+    let kept = turns;
+    let trimmed = false;
+    if (!full) {
+      let total = turns.reduce((n, t) => n + t.text.length, 0);
+      while (total > budget && kept.length > 4) {
+        total -= kept[0].text.length;
+        kept = kept.slice(1);
+        trimmed = true;
+      }
+    }
+
+    const meta = { sessionId: this.sessionIdOf(session.source), cwd: session.cwd, startedAt: null, model: null };
+    const entries = kept.map((t) => ({ role: t.role === 'user' ? 'user' : 'assistant', text: t.text }));
+    return {
+      entries,
+      meta,
+      counts,
+      trimmed,
+      preamble: buildPreamble(meta, counts, trimmed, { name: 'Claude Code', unit: 'session' }),
+    };
   },
 
   /** A resumable Claude conversation, built from turns taken anywhere. */

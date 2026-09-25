@@ -34,10 +34,29 @@ conversation, not a summary of it. The two diverge from that point; nothing merg
 `cc` with a Codex session named (`cc 3`, `cc --last`, `cc "thread name"`) still brings that
 one over, and `cx --alongside` still opens the same conversation in Codex beside you.
 
+## More than two harnesses
+
+`cc` and `cx` own the Codex ↔ Claude Code crossing, because only there can switchboard
+close the agent you are in and give the same terminal back as the other one. Everything
+else goes through `sb`, which works from inside any registered harness:
+
+```bash
+sb to gemini      # hand this conversation to Gemini CLI, opened beside it
+sb to claude      # …or to Claude Code, from Codex or Gemini
+sb fork           # duplicate this conversation into a side chat here
+sb list           # what is registered, and what each one can do
+```
+
+`sb to` always opens alongside and leaves the harness you are in running. Gemini CLI is
+supported for handoff both ways and for forking; adding a fourth harness is one file in
+`scripts/lib/harness/` — see [docs/harnesses.md](docs/harnesses.md).
+
 ## Requirements
 
 zsh, Node 18+, and [Codex](https://github.com/openai/codex) 0.150+ and/or
 [Claude Code](https://docs.claude.com/en/docs/claude-code). macOS and Linux.
+[Gemini CLI](https://github.com/google-gemini/gemini-cli) 0.39+ is optional, and only
+needed for `sb to gemini`.
 
 ## Install
 
@@ -49,7 +68,7 @@ git clone https://github.com/Blue-Cardigan/switchboard.git ~/.claude/skills/swit
 Then open a new terminal. Clone wherever you like — the path above just saves a symlink.
 
 The installer is idempotent, backs up what it edits, and refuses to overwrite anything it
-does not own. It adds `~/.local/bin/{cc,cx,cx2cc}`,
+does not own. It adds `~/.local/bin/{cc,cx,cx2cc,sb}`,
 `~/.config/switchboard/codex-handoff.zsh`, one `source` line in `~/.zshrc`, and a
 `~/.claude/skills/switchboard` symlink so Claude Code finds the plugin.
 
@@ -63,6 +82,10 @@ re-read files rather than trust the summary. Long sessions are trimmed to ~120k 
 
 **Claude Code → Codex** uses Codex's own importer, so the result is an ordinary Codex
 thread. Re-importing the same conversation reuses that thread instead of duplicating it.
+
+**Anything → Gemini CLI** writes a session file of the kind Gemini writes itself, so
+`gemini --resume` replays it as real history. Same trade as above: prompts and replies in
+full, tool calls as a summary.
 
 ## Claude desktop
 

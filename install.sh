@@ -50,7 +50,7 @@ fi
 if [ "${1:-}" = "--uninstall" ]; then
   printf 'Removing switchboard...\n'
   node "$REPO/scripts/install-codex-hook.mjs" remove 2>/dev/null || true
-  for c in cc cx cx2cc; do
+  for c in cc cx cx2cc sb; do
     if ours "$HOME/.local/bin/$c"; then rm -f "$HOME/.local/bin/$c"; say "removed ~/.local/bin/$c"; fi
   done
   if ours "$WRAPPER"; then rm -f "$WRAPPER"; say "removed $WRAPPER"; fi
@@ -72,10 +72,11 @@ command -v node >/dev/null 2>&1 || { warn "node not found — switchboard needs 
 command -v zsh  >/dev/null 2>&1 || { warn "zsh not found — the in-place handoff needs zsh"; exit 1; }
 command -v codex  >/dev/null 2>&1 || warn "codex not on PATH — install it before using cc"
 command -v claude >/dev/null 2>&1 || warn "claude not on PATH — install it before using cx"
+command -v gemini >/dev/null 2>&1 || warn "gemini not on PATH — install it before using sb to gemini"
 
 # 1. Commands.
 mkdir -p "$HOME/.local/bin"
-for c in cc cx cx2cc; do
+for c in cc cx cx2cc sb; do
   target="$HOME/.local/bin/$c"
   if [ -e "$target" ] && ! ours "$target"; then
     warn "$target already exists and is not ours — skipping (remove it and re-run)"

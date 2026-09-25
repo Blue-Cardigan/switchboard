@@ -3,9 +3,10 @@
 // to every call site.
 import claude from './claude.mjs';
 import codex from './codex.mjs';
+import gemini from './gemini.mjs';
 import { currentAgent } from '../agentContext.mjs';
 
-const REGISTERED = [claude, codex];
+const REGISTERED = [claude, codex, gemini];
 
 export const harnesses = Object.freeze(
   Object.fromEntries(REGISTERED.map((h) => [h.id, h])),
@@ -36,12 +37,6 @@ export function host() {
   if (byAncestry && harnesses[byAncestry]) return harnesses[byAncestry];
   const byEnv = REGISTERED.find((h) => h.hostEnv?.());
   return byEnv || null;
-}
-
-/** The other one, when there are two. Ambiguous once there are more, so it asks. */
-export function counterpart(from) {
-  const others = REGISTERED.filter((h) => h.id !== from);
-  return others.length === 1 ? others[0] : null;
 }
 
 export function resumeArgv(harnessId, sessionId) {

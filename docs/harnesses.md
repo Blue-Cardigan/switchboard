@@ -2,7 +2,8 @@
 
 Switchboard used to branch on "Codex or Claude Code?" at every call site. It now asks a
 registry, so a third harness is a file in `scripts/lib/harness/` rather than an edit
-everywhere.
+everywhere. Three are registered: `claude`, `codex`, `gemini`. `sb list` prints them
+with what each one can do.
 
 ## The interface
 
@@ -47,6 +48,33 @@ This is the part that differs most, and it is worth checking before writing an a
   ancestry plus `lsof` identifies the session exactly.
 - **Claude Code** exports neither. A `SessionStart` hook records terminal → session, and
   the fallback is the newest transcript for the directory.
+- **Gemini CLI** exports neither either, and has no hook installed yet, so `live()` only
+  answers when Gemini is an ancestor of the running process and it answers with the
+  newest session in the directory. Good enough to hand a conversation out of; not yet
+  exact when two Gemini sessions share a directory.
 
 A harness that offers neither route needs a hook of its own before handoff can be
 in-place rather than by selection.
+
+## Gemini CLI specifics
+
+Worth knowing before you touch `scripts/lib/geminiSession.mjs`, because none of it is
+documented and all of it was read out of the installed bundle:
+
+- A session is JSONL at `~/.gemini/tmp/<slug>/chats/session-<timestamp>-<8 chars>.jsonl`.
+  First line is metadata (`sessionId`, `projectHash`, `startTime`, `lastUpdated`,
+  `kind`); the rest are messages (`id`, `timestamp`, `type: user|gemini`, `content`),
+  plus `{"$set": …}` metadata updates and `{"$rewindTo": id}` truncations.
+- `<slug>` is **not** a hash. Gemini keeps `~/.gemini/projects.json` mapping the
+  normalised project path to a slugified basename, and marks ownership with a
+  `.project_root` file under both `~/.gemini/tmp/<slug>/` and `~/.gemini/history/<slug>/`.
+  Switchboard claims a slug the same way, so Gemini adopts it rather than allocating a
+  second one for the same directory.
+- `--resume` takes `latest`, a 1-based index, **or a full session UUID** — which is what
+  makes an id-addressed handoff possible at all.
+- Rebuilding model history drops any user turn whose trimmed text starts with `/` or `?`
+  (its command prefixes), so imported turns that open with one are quoted.
+- `kind: "main"` matters: sessions recorded as `subagent` are hidden from the picker.
+
+`SWITCHBOARD_GEMINI_HOME` overrides `~/.gemini` so a test can write somewhere
+disposable. Gemini itself has no such override — it always reads the home directory.

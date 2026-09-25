@@ -51,8 +51,8 @@ export default {
    */
   async write({ entries, cwd, preamble, transcript = null }) {
     const source = transcript || writeTranscript({ cwd, entries, preamble }).file;
-    const threadId = await importClaudeSession(source, cwd);
-    return { id: threadId, source, cwd };
+    const { threadId, reused } = await importClaudeSession(source, cwd);
+    return { id: threadId, source, cwd, reused };
   },
 
   hostEnv() {
