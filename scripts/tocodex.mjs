@@ -160,8 +160,11 @@ async function main() {
   if (flags.queue) { queueToThread(session, flags.queue === true ? rest[0] : String(flags.queue)); return; }
 
   process.stderr.write(`switchboard → codex (importing this conversation, ${session.via})…\n`);
-  const { threadId, reused } = await importClaudeSession(session.source, session.cwd);
-  const line = `claude ${path.basename(session.source).slice(0, 8)} → codex ${threadId.slice(0, 8)}${reused ? ' (already imported)' : ''}`;
+  const { threadId, reused, originalBytes, importedBytes } = await importClaudeSession(session.source, session.cwd);
+  const compacted = importedBytes < originalBytes
+    ? ` · ${Math.round(originalBytes / 1000)} kB → ${Math.round(importedBytes / 1000)} kB`
+    : '';
+  const line = `claude ${path.basename(session.source).slice(0, 8)} → codex ${threadId.slice(0, 8)}${reused ? ' (already imported)' : ''}${compacted}`;
 
   if (flags.print || (!proc?.tty && !flags.alongside)) {
     if (flags.session && !flags.print) {

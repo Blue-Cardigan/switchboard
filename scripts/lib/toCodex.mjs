@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { isPristineAuthored, recordAuthored } from './claudeTranscript.mjs';
+import { compactClaudeTranscript } from './compactClaude.mjs';
 
 const IMPORT_COMPLETED = 'externalAgentConfig/import/completed';
 
@@ -159,7 +160,7 @@ function completeLines(bytes) {
 }
 
 function importSnapshot(source, bytes, sha) {
-  if (isPristineAuthored(source)) return source;
+  if (isPristineAuthored(source) && digest(fs.readFileSync(source)) === sha) return source;
   const id = `${sha.slice(0, 8)}-${sha.slice(8, 12)}-4${sha.slice(13, 16)}-8${sha.slice(17, 20)}-${sha.slice(20, 32)}`;
   const snapshot = path.join(path.dirname(source), `${id}.jsonl`);
   try {
@@ -186,14 +187,16 @@ export async function importClaudeSession(sourcePath, cwd) {
     throw new Error(`Codex imports Claude sessions only from ${projects}`);
   }
 
-  const bytes = completeLines(fs.readFileSync(source));
+  const original = completeLines(fs.readFileSync(source));
+  const bytes = compactClaudeTranscript(original).bytes;
   const sha = digest(bytes);
   const existing = ledgerThreadId(source, sha);
-  if (existing) return { threadId: existing, reused: true };
+  const size = { originalBytes: original.length, importedBytes: bytes.length };
+  if (existing) return { threadId: existing, reused: true, ...size };
 
   const importedSource = importSnapshot(source, bytes, sha);
   const importedExisting = ledgerThreadId(importedSource, sha);
-  if (importedExisting) return { threadId: importedExisting, reused: true };
+  if (importedExisting) return { threadId: importedExisting, reused: true, ...size };
 
   const server = new AppServer(cwd);
   server.start();
@@ -238,5 +241,5 @@ export async function importClaudeSession(sourcePath, cwd) {
         : `  nothing in ${LEDGERS.map((l) => l.file).join(' or ')} matches it; run Codex's own /import to see what it says`),
     );
   }
-  return { threadId, reused: false };
+  return { threadId, reused: false, ...size };
 }

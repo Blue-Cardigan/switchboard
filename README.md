@@ -26,6 +26,12 @@ This opens Codex in the same terminal. Add `--print` to get the resume command
 without opening it, or `--alongside` to open a separate terminal. Run it from
 the session's project directory, or pass `--cwd DIR`.
 
+Claude → Codex imports keep the opening request and recent conversation, up to
+120,000 characters. Tool calls and results, thinking, shell UI echoes, and
+session-limit notices are omitted. Individual turns are capped at 4,000
+characters. The original Claude transcript is untouched; Codex receives a
+stable, compact copy, so a live transcript can keep growing during import.
+
 ## Side chats
 
 Inside Claude Code, `cc --alongside` duplicates **this** conversation rather than fetching
