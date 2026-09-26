@@ -6,6 +6,7 @@ import path from 'node:path';
 import { execFileSync, spawnSync, spawn } from 'node:child_process';
 import { ROOT } from './lib/state.mjs';
 import { importClaudeSession } from './lib/toCodex.mjs';
+import { compactClaudeTranscript } from './lib/compactClaude.mjs';
 import { wrapperActive } from './lib/agentContext.mjs';
 import { claudeProcess, resolveSession } from './lib/claudeSession.mjs';
 import { projectDirFor } from './lib/claudeTranscript.mjs';
@@ -160,7 +161,20 @@ async function main() {
   }
   if (!session) throw new Error(`No Claude transcript found for ${cwd}.`);
 
-  // Both of these leave Claude Code running and start no new Codex thread.
+  // These inspections leave Claude Code running and start no new Codex thread.
+  if (flags.preview) {
+    const original = fs.readFileSync(session.source);
+    const result = compactClaudeTranscript(original);
+    const turns = result.bytes.toString('utf8').trim().split('\n').map((line) => JSON.parse(line));
+    console.log(`Claude → Codex preview (${session.via})`);
+    console.log(`  ${result.kept} turns kept · ${result.skipped} non-conversation rows skipped · ${result.dropped} older turns omitted`);
+    console.log(`  ${Math.round(original.length / 1000)} kB → ${Math.round(result.bytes.length / 1000)} kB`);
+    console.log(`  first: ${String(turns[0]?.message?.content || '').slice(0, 160).replace(/\s+/g, ' ')}`);
+    const last = turns.at(-1);
+    const content = last?.message?.content;
+    console.log(`  last: ${String(typeof content === 'string' ? content : content?.[0]?.text || '').slice(0, 160).replace(/\s+/g, ' ')}`);
+    return;
+  }
   if (flags.context) { printContext(session); return; }
   if (flags.queue) { queueToThread(session, flags.queue === true ? rest[0] : String(flags.queue)); return; }
 

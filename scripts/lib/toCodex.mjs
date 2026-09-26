@@ -52,7 +52,8 @@ class AppServer {
 
   dispatch(msg) {
     if (msg.id !== undefined && this.pending.has(msg.id)) {
-      const { resolve, reject } = this.pending.get(msg.id);
+      const { resolve, reject, timer } = this.pending.get(msg.id);
+      clearTimeout(timer);
       this.pending.delete(msg.id);
       if (msg.error) reject(new Error(msg.error.message || JSON.stringify(msg.error)));
       else resolve(msg.result);
@@ -71,10 +72,10 @@ class AppServer {
   request(method, params = {}, timeoutMs = 120000) {
     const id = this.nextId++;
     const promise = new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         if (this.pending.delete(id)) reject(new Error(`Codex app-server did not answer ${method} in time.`));
       }, timeoutMs);
+      this.pending.set(id, { resolve, reject, timer });
     });
     this.send({ jsonrpc: '2.0', id, method, params });
     return promise;
@@ -192,11 +193,17 @@ export async function importClaudeSession(sourcePath, cwd) {
   const sha = digest(bytes);
   const existing = ledgerThreadId(source, sha);
   const size = { originalBytes: original.length, importedBytes: bytes.length };
-  if (existing) return { threadId: existing, reused: true, ...size };
+  if (existing) {
+    await verifyCodexThread(existing, cwd);
+    return { threadId: existing, reused: true, ...size };
+  }
 
   const importedSource = importSnapshot(source, bytes, sha);
   const importedExisting = ledgerThreadId(importedSource, sha);
-  if (importedExisting) return { threadId: importedExisting, reused: true, ...size };
+  if (importedExisting) {
+    await verifyCodexThread(importedExisting, cwd);
+    return { threadId: importedExisting, reused: true, ...size };
+  }
 
   const server = new AppServer(cwd);
   server.start();
@@ -241,5 +248,22 @@ export async function importClaudeSession(sourcePath, cwd) {
         : `  nothing in ${LEDGERS.map((l) => l.file).join(' or ')} matches it; run Codex's own /import to see what it says`),
     );
   }
+  await verifyCodexThread(threadId, cwd);
   return { threadId, reused: false, ...size };
+}
+
+/** Verify the imported thread can actually be reopened before the source exits. */
+export async function verifyCodexThread(threadId, cwd) {
+  const server = new AppServer(cwd);
+  server.start();
+  try {
+    await server.request('initialize', {
+      clientInfo: { name: 'switchboard', title: 'Switchboard', version: '0.1.0' },
+    });
+    server.notify('initialized', {});
+    const result = await server.request('thread/read', { threadId, includeTurns: true }, 30000);
+    if (result?.thread?.id !== threadId || !result.thread.turns?.length) {
+      throw new Error(`Codex thread ${threadId} has no readable conversation; source session remains open.`);
+    }
+  } finally { server.stop(); }
 }

@@ -6,11 +6,12 @@ import codex from './codex.mjs';
 import antigravity from './antigravity.mjs';
 import gemini from './gemini.mjs';
 import openSource from './openSource.mjs';
+import opencode from './opencode.mjs';
 import { currentAgent } from '../agentContext.mjs';
 
 // Order is the order `sb list` shows: the harnesses switchboard can read out
 // first, then the ones it can only hand a conversation to.
-const REGISTERED = [claude, codex, antigravity, gemini, ...openSource];
+const REGISTERED = [claude, codex, antigravity, gemini, opencode, ...openSource];
 
 export const harnesses = Object.freeze(
   Object.fromEntries(REGISTERED.map((h) => [h.id, h])),

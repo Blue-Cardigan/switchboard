@@ -65,13 +65,17 @@ sb to opencode    # …or to opencode, goose, crush, aider, qwen
 sb to claude      # …or back to Claude Code, from any of them
 sb fork           # duplicate this conversation into a side chat here
 sb list           # what is registered, installed, and able to do what
+sb sessions       # recent sessions across every registered harness
+sb sessions 2     # reopen numbered session from that list
+sb doctor         # check hook, wrapper, mapping, ledgers and CLI versions
 ```
 
 `sb to` always opens alongside and leaves the harness you are in running.
 
-Nine harnesses are registered. Four of them — Claude Code, Codex, Antigravity, Gemini CLI
-— switchboard can read *out* of as well as into, because their conversation stores are
-stable enough to parse. The five open-source agents are hand-to only: their sessions
+Nine harnesses are registered. Five of them — Claude Code, Codex, Antigravity, Gemini CLI
+and OpenCode — switchboard can read *out* of as well as into, because their conversation stores are
+stable enough to parse or export. OpenCode uses its native session export/import, keeping
+separate conversation turns. The remaining four open-source agents are hand-to only: their sessions
 arrive as an opening message rather than as replayed history, which is enough to carry on
 with and is not a transplant. `sb list` marks which are installed here, and which flags
 come from a project's documentation rather than from a binary switchboard has run.
@@ -109,7 +113,9 @@ Then open a new terminal. Clone wherever you like — the path above just saves 
 The installer is idempotent, backs up what it edits, and refuses to overwrite anything it
 does not own. It adds `~/.local/bin/{cc,cx,cx2cc,sb,id}`,
 `~/.config/switchboard/codex-handoff.zsh`, one `source` line in `~/.zshrc`, and a
-`~/.claude/skills/switchboard` symlink so Claude Code finds the plugin.
+`~/.claude/skills/switchboard` symlink and a SessionStart entry in
+`~/.claude/settings.json`. The latter is necessary because a skill symlink does not load
+plugin hooks.
 
 ## What survives
 
@@ -121,6 +127,8 @@ re-read files rather than trust the summary. Long sessions are trimmed to ~120k 
 
 **Claude Code → Codex** uses Codex's own importer, so the result is an ordinary Codex
 thread. Re-importing the same conversation reuses that thread instead of duplicating it.
+Switchboard previews the compacted import with `cx --preview` (or `cx UUID --preview`
+for a saved session). It verifies Codex can read the imported turns before closing Claude.
 
 **Anything → an open-source agent** stages the conversation as a Markdown file and opens
 that agent on it: `opencode --prompt`, `goose run --instructions … --interactive`,
@@ -187,6 +195,7 @@ Nothing has to be replaced, either. From inside Claude Code:
 
 ```bash
 cx --context       # print the conversation, to paste into Codex yourself
+cx --preview       # show turn counts and size before importing
 cx --queue         # push it into the Codex session already running here
 cx --queue <id>    # …or into one named by id or session name
 ```

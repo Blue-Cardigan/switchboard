@@ -9,7 +9,8 @@
 #   ~/.local/bin/{cc,cx,cx2cc,sb,id}              symlinks to bin/
 #   ~/.config/switchboard/codex-handoff.zsh       symlink to shell/
 #   ~/.zshrc                                      one `source` line (backed up)
-#   ~/.claude/skills/switchboard                  symlink, so Claude Code loads the plugin
+#   ~/.claude/skills/switchboard                  symlink for Claude commands
+#   ~/.claude/settings.json                       SessionStart entry (backed up)
 #   ~/.codex/hooks.json                           one entry, only with --codex-hooks
 set -eu
 
@@ -50,6 +51,7 @@ fi
 if [ "${1:-}" = "--uninstall" ]; then
   printf 'Removing switchboard...\n'
   node "$REPO/scripts/install-codex-hook.mjs" remove 2>/dev/null || true
+  node "$REPO/scripts/install-claude-hook.mjs" remove 2>/dev/null || true
   for c in cc cx cx2cc sb id; do
     if ours "$HOME/.local/bin/$c"; then rm -f "$HOME/.local/bin/$c"; say "removed ~/.local/bin/$c"; fi
   done
@@ -73,6 +75,7 @@ command -v zsh  >/dev/null 2>&1 || { warn "zsh not found — the in-place handof
 command -v codex  >/dev/null 2>&1 || warn "codex not on PATH — install it before using cc"
 command -v claude >/dev/null 2>&1 || warn "claude not on PATH — install it before using cx"
 command -v agy >/dev/null 2>&1 || warn "agy not on PATH — install it before using sb to antigravity"
+node "$REPO/scripts/install-claude-hook.mjs" install
 
 # 1. Commands.
 mkdir -p "$HOME/.local/bin"
@@ -110,15 +113,15 @@ else
   say "added the source line to ~/.zshrc (backup: ~/.zshrc.bak-switchboard)"
 fi
 
-# 3. Claude Code plugin discovery.
+# 3. Claude Code commands. The SessionStart hook is registered separately above.
 if [ "$REPO" = "$SKILL" ] || [ "$(readlink "$SKILL" 2>/dev/null)" = "$REPO" ]; then
-  say "Claude Code already loads the plugin from this checkout"
+  say "Claude Code commands already point to this checkout"
 elif [ -e "$SKILL" ]; then
   warn "$SKILL exists and is not this checkout — leaving it alone"
 else
   mkdir -p "$HOME/.claude/skills"
   ln -sfn "$REPO" "$SKILL"
-  say "linked $SKILL so Claude Code loads the plugin"
+  say "linked $SKILL for Claude Code commands"
 fi
 
 cat <<'MSG'

@@ -13,16 +13,6 @@ import { seededHarness } from './seeded.mjs';
 
 const SPECS = [
   {
-    id: 'opencode',
-    label: 'opencode',
-    bin: 'opencode',
-    install: 'curl -fsSL https://opencode.ai/install | bash',
-    docs: 'https://opencode.ai/docs/cli/',
-    launch: ({ seed }) => `exec opencode --prompt "$(cat ${shq(seed)})"`,
-    resumeArgv: (id) => ['opencode', '--session', id],
-    note: 'opencode export/import move a whole session as JSON — the better route once that format is pinned to a version.',
-  },
-  {
     id: 'goose',
     label: 'goose',
     bin: 'goose',

@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { liveSession, forkTranscript } from '../claudeSession.mjs';
-import { writeTranscript, projectDirFor, buildPreamble } from '../claudeTranscript.mjs';
+import { writeTranscript, projectDirFor, buildPreamble, isPristineAuthored } from '../claudeTranscript.mjs';
 import { readTurnsSince } from '../transcript.mjs';
 
 export default {
@@ -25,6 +25,17 @@ export default {
   live(cwd) {
     const found = liveSession(cwd);
     return found && { id: null, source: found.source, cwd: found.cwd || cwd, via: found.via };
+  },
+
+  list({ cwd = process.cwd(), limit = 20 } = {}) {
+    const dir = projectDirFor(cwd);
+    let names;
+    try { names = fs.readdirSync(dir).filter((name) => /^[0-9a-f-]{36}\.jsonl$/i.test(name) && !isPristineAuthored(path.join(dir, name))); }
+    catch { return []; }
+    return names.map((name) => {
+      const source = path.join(dir, name);
+      return { id: name.slice(0, -6), source, cwd, mtime: fs.statSync(source).mtimeMs };
+    }).sort((a, b) => b.mtime - a.mtime).slice(0, limit);
   },
 
   /** Turns of a Claude conversation, in the shape every adapter passes around. */

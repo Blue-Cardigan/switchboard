@@ -7,6 +7,9 @@
 #?   sb fork              duplicate this conversation into a side chat here
 #?                        --model <id> gives the copy a different model
 #?   sb list              which harnesses are registered, installed, and can do what
+#?   sb sessions          recent sessions across all registered harnesses
+#?   sb sessions N        reopen numbered session from that list
+#?   sb doctor            check hooks, wrapper, mappings, ledgers and CLI versions
 #?   sb where             which harness this command is running inside
 #?
 #? Add --print to any of these to see the command instead of opening anything,
@@ -27,6 +30,8 @@ case "$cmd" in
   to)    exec node "$ROOT/scripts/handoff.mjs" --to "$@" ;;
   fork)  exec node "$ROOT/scripts/fork.mjs" "$@" ;;
   list)  exec node "$ROOT/scripts/harnesses.mjs" "$@" ;;
+  sessions) exec node "$ROOT/scripts/sessions.mjs" "$@" ;;
+  doctor) exec node "$ROOT/scripts/doctor.mjs" "$@" ;;
   where) exec node "$ROOT/scripts/context.mjs" ;;
   *)
     print -r -- "sb: unknown command \"$cmd\". Try: sb --help" >&2

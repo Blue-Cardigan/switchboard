@@ -2,8 +2,8 @@
 
 Switchboard used to branch on "Codex or Claude Code?" at every call site. It now asks a
 registry, so a third harness is a file in `scripts/lib/harness/` rather than an edit
-everywhere. Nine are registered: `claude`, `codex`, `antigravity` and `gemini` read and
-write; `opencode`, `goose`, `crush`, `aider` and `qwen` are hand-to only, and come from one
+everywhere. Nine are registered: `claude`, `codex`, `antigravity`, `gemini` and `opencode` read and
+write; `goose`, `crush`, `aider` and `qwen` are hand-to only, and come from one
 table rather than a file each. `sb list` prints them with what each one can do, whether it
 is installed here, and whether its flags have been exercised against a binary.
 
@@ -154,11 +154,10 @@ The trade is the same one Antigravity makes, and it is worth saying out loud: a 
 conversation arrives as one opening message, not as turns the model can see itself having
 taken. It carries the work. It is not a transplant.
 
-### The five, and what each one needed
+### The four, and what each one needed
 
 | Harness | Opening prompt | Reopen by id | Note |
 |---|---|---|---|
-| `opencode` | `--prompt` on the TUI | `--session <id>` | `opencode export`/`import` move a whole session as JSON — the better route once that format is pinned to a version |
 | `goose` | `run --instructions <file> --interactive --name …` | `session --resume --name` | the closest fit in the field: a file, interactivity afterwards, and a name to come back to |
 | `crush` | none — so `crush run` seeds and `crush --continue` opens the TUI on that session | `--session <id>` | costs one model reply to the seed |
 | `aider` | `--message-file <file>`, which answers and exits | no session store | reopened with `--restore-chat-history`, which reads `.aider.chat.history.md` in the repo |
@@ -166,7 +165,7 @@ taken. It carries the work. It is not a transplant.
 
 ### Verification, honestly
 
-None of these five were installed on the machine where they were written, so their flags
+None of these four were installed on the machine where they were written, so their flags
 come from each project's own documentation and `sb list` says so per harness:
 
 ```
