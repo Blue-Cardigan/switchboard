@@ -24,7 +24,20 @@ if [[ -z "$SWITCHBOARD_HOME" ]]; then
 fi
 
 _switchboard_claim() {
-  local want="$1" staged target id dir argv tty
+  local want="$1" rc="${2:-0}" staged target id dir argv tty
+  # Reset first, before the node lookup below: until then the terminal is still
+  # sending escape codes for every mouse move, and the tty echoes them.
+  if (( rc > 128 )); then
+    # A signal (rc > 128) means the agent was killed, usually by !cc or !cx,
+    # and nothing restores the terminal on a signal: raw mode, mouse tracking,
+    # focus reports and the kitty keyboard protocol stay on, so every keypress
+    # and mouse move arrives as an escape code. Put the terminal back and drop
+    # what queued up meanwhile, so the next agent starts clean.
+    print -rn -- $'\e[<10u\e[>4m\e[?1000l\e[?1002l\e[?1003l\e[?1006l\e[?1004l\e[?2004l\e[?2026l\e[?1049l\e[?25h' 2>/dev/null
+    stty sane 2>/dev/null
+    local _sb_n=0 _sb_junk
+    while (( _sb_n++ < 4096 )) && read -s -t 0.02 -k 1 _sb_junk 2>/dev/null; do :; done
+  fi
   tty=$(ps -o tty= -p $$ 2>/dev/null | tr -d ' ')
   [[ -n "$tty" && "$tty" != '??' ]] || tty="${TTY:-$(tty 2>/dev/null)}"
   staged=$(node "$SWITCHBOARD_HOME/scripts/pending.mjs" claim "$tty" "$want" 2>/dev/null) || return 1
@@ -78,7 +91,7 @@ migrate-rollouts|cloud|exec-server|features|help|-h|--help|-V|--version)
     unset _sb_rc
   fi
   typeset -f _switchboard_claim >/dev/null 2>&1 || return $rc
-  _switchboard_claim claude || return $rc
+  _switchboard_claim claude $rc || return $rc
 }
 
 claude() {
@@ -111,5 +124,5 @@ ultrareview|update|upgrade|-h|--help|--version)
     unset _sb_rc
   fi
   typeset -f _switchboard_claim >/dev/null 2>&1 || return $rc
-  _switchboard_claim codex || return $rc
+  _switchboard_claim codex $rc || return $rc
 }

@@ -32,6 +32,15 @@ _switchboard_finish() {
     print -u2 "switchboard: staged entry for $tty was unusable ($id / $dir)."
     return 1
   fi
+  # The agent being left was killed, and neither Codex nor anything else
+  # restores the terminal on a signal: raw mode, mouse tracking, focus reports
+  # and the kitty keyboard protocol stay on, so every keypress and mouse move
+  # arrives as an escape code. Put the terminal back and drop what queued up
+  # meanwhile, so the next agent starts clean.
+  print -rn -- $'\e[<10u\e[>4m\e[?1000l\e[?1002l\e[?1003l\e[?1006l\e[?1004l\e[?2004l\e[?2026l\e[?1049l\e[?25h' 2>/dev/null
+  stty sane 2>/dev/null
+  local _sb_n=0 _sb_junk
+  while (( _sb_n++ < 4096 )) && read -s -t 0.02 -k 1 _sb_junk 2>/dev/null; do :; done
   cd "$dir" || return 1
   print -P "%F{cyan}switchboard%f resuming this conversation in ${target}…"
   # The harness adapter names the command; older staged entries predate that
