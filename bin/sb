@@ -11,6 +11,8 @@
 #?   sb sessions N        reopen numbered session from that list
 #?   sb doctor            check hooks, wrapper, mappings, ledgers and CLI versions
 #?   sb where             which harness this command is running inside
+#?   sb limit             what happens when this harness hits its usage limit
+#?                        on | off, to <harness|recent>, start on | off
 #?
 #? Add --print to any of these to see the command instead of opening anything,
 #? and --cwd DIR to work on a different directory.
@@ -33,6 +35,7 @@ case "$cmd" in
   sessions) exec node "$ROOT/scripts/sessions.mjs" "$@" ;;
   doctor) exec node "$ROOT/scripts/doctor.mjs" "$@" ;;
   where) exec node "$ROOT/scripts/context.mjs" ;;
+  limit) exec node "$ROOT/scripts/limit.mjs" "$@" ;;
   *)
     print -r -- "sb: unknown command \"$cmd\". Try: sb --help" >&2
     exit 1

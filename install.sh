@@ -2,7 +2,7 @@
 # Switchboard installer. Idempotent: safe to re-run, and to run after a git pull.
 #
 #   ./install.sh                install
-#   ./install.sh --codex-hooks  also route Codex prompts to Claude (opt-in)
+#   ./install.sh --codex-hooks  also route Codex prompts to Claude, and hand off on its usage limit (opt-in)
 #   ./install.sh --uninstall    remove everything it added
 #
 # What it touches, and nothing else:
@@ -11,7 +11,7 @@
 #   ~/.zshrc                                      one `source` line (backed up)
 #   ~/.claude/skills/switchboard                  symlink for Claude commands
 #   ~/.claude/settings.json                       SessionStart entry (backed up)
-#   ~/.codex/hooks.json                           one entry, only with --codex-hooks
+#   ~/.codex/hooks.json                           our entries only, only with --codex-hooks
 set -eu
 
 REPO=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)

@@ -21,6 +21,11 @@ export default {
     return ['codex', 'resume', threadId];
   },
 
+  /** Trailing arguments that make a reopened session start on a prompt. */
+  promptArgv(prompt) {
+    return [prompt];
+  },
+
   live(cwd) {
     const found = detectCurrentSession({ cwd });
     return found && { id: found.sessionId, source: found.file, cwd: found.cwd || cwd, via: found.via };

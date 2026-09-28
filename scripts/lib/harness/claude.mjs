@@ -21,6 +21,11 @@ export default {
     return ['claude', '--resume', sessionId];
   },
 
+  /** Trailing arguments that make a reopened session start on a prompt. */
+  promptArgv(prompt) {
+    return [prompt];
+  },
+
   /** The conversation running in this terminal, if it is one of ours. */
   live(cwd) {
     const found = liveSession(cwd);

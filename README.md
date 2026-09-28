@@ -53,6 +53,28 @@ conversation, not a summary of it. The two diverge from that point; nothing merg
 `cc` with a Codex session named (`cc 3`, `cc --last`, `cc "thread name"`) still brings that
 one over, and `cx --alongside` still opens the same conversation in Codex beside you.
 
+## When you hit a usage limit
+
+On by default. When Claude Code or Codex stops because its usage limit is reached, the
+conversation opens in another harness beside it — a new Zed/iTerm/tmux pane, the same way
+`--alongside` does. The limited session is left where it is, so you can go back to it once
+the limit resets.
+
+```bash
+sb limit                  # show the current setting
+sb limit off              # turn it off (sb limit on to turn it back on)
+sb limit to codex         # always hand it to one harness…
+sb limit to recent        # …or to the one you used most recently here (the default)
+sb limit start on         # have the new session carry on by itself instead of waiting
+```
+
+Claude Code reports the limit through a `StopFailure` hook (`rate_limit` / `billing_error`),
+which the plugin registers. Codex has no failure hook, so its `Stop` hook reads the last turn
+of the rollout and acts only when it ended in `usage_limit_exceeded`; that hook ships with
+`./install.sh --codex-hooks`. Each session hands off at most once per 30 minutes, and a
+failed routed turn never opens anything. Outcomes are logged to
+`~/.claude/switchboard/logs/on-limit.log`.
+
 ## More than two harnesses
 
 `cc` and `cx` own the Codex ↔ Claude Code crossing, because only there can switchboard

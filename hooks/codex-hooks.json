@@ -8,7 +8,10 @@
     "into it (and `./install.sh --uninstall` takes it back out again).",
     "",
     "${SWITCHBOARD_HOME} is substituted for the real checkout path on install;",
-    "Codex does not expand it, and a user-level hooks.json gets no plugin root."
+    "Codex does not expand it, and a user-level hooks.json gets no plugin root.",
+    "",
+    "Stop runs on-limit.mjs, which hands the conversation on when the turn ended in",
+    "usage_limit_exceeded (toggle with  sb limit off)."
   ],
   "hooks": {
     "UserPromptSubmit": [
@@ -18,6 +21,17 @@
             "type": "command",
             "command": "node \"${SWITCHBOARD_HOME}/scripts/route-codex.mjs\"",
             "timeout": 900
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${SWITCHBOARD_HOME}/scripts/on-limit.mjs\" codex",
+            "timeout": 120
           }
         ]
       }

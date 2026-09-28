@@ -15,7 +15,7 @@ import { desktopRoot, listDesktopSessions, materialiseDesktopSession, pickDeskto
 import { detectCurrentSession, findCodexAncestor, openRollouts, resolveCodexTty } from './lib/currentSession.mjs';
 import { ROOT } from './lib/state.mjs';
 import { currentAgent, wrapperActive } from './lib/agentContext.mjs';
-import { openAlongside, openInTerminal, resumeCommand } from './lib/launch.mjs';
+import { openAlongside, resumeCommand } from './lib/launch.mjs';
 
 function parse(argv) {
   const flags = {};
@@ -154,7 +154,9 @@ async function handoff(verb, flags, sessions, cwd, rest = []) {
       console.log(`${line}\n  no terminal found for this session; opening it alongside instead.`);
     }
 
-    const how = alongside ? openAlongside(written.sessionId, dir) : (openInTerminal(written.sessionId, dir) && 'opened a new Terminal window');
+    // Anything that is not an explicit --print ends up beside this session: the
+    // old Terminal.app-only fallback ignored Zed, tmux and iTerm.
+    const how = openAlongside(written.sessionId, dir);
     // Say what is still running *here*, which is not always Codex: this command
     // is also reachable from inside Claude Code and from a bare shell.
     const host = currentAgent();

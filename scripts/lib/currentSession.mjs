@@ -118,11 +118,68 @@ export function resolveCodexTty(sessionFile = null) {
     try {
       pids = execFileSync('pgrep', ['-x', 'codex'], { encoding: 'utf8' });
     } catch { pids = ''; }
-    for (const raw of pids.split('\n').map((p) => p.trim()).filter(Boolean)) {
+    const list = pids.split('\n').map((p) => p.trim()).filter(Boolean);
+    for (const raw of list) {
       if (!openRollouts(raw).includes(sessionFile)) continue;
       const tty = ttyOf(raw);
       if (tty) return { tty, pid: Number(raw), via: `pid ${raw} holds this rollout` };
     }
+    return daemonClientTty(list, sessionFile);
+  }
+  return null;
+}
+
+function cwdOf(pid) {
+  try {
+    const out = execFileSync('lsof', ['-a', '-p', String(pid), '-d', 'cwd', '-Fn'], {
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return (/^n(.+)$/m.exec(out) || [])[1] || null;
+  } catch {
+    return null;
+  }
+}
+
+function sessionCwd(sessionFile) {
+  try {
+    const fd = fs.openSync(sessionFile, 'r');
+    const buf = Buffer.alloc(16384);
+    const n = fs.readSync(fd, buf, 0, buf.length, 0);
+    fs.closeSync(fd);
+    return JSON.parse(buf.subarray(0, n).toString('utf8').split('\n')[0]).payload?.cwd || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Codex 0.158 runs sessions inside a shared app-server daemon: the daemon holds
+ * the rollout open and spawns `!` commands, and the TUI on the terminal is a
+ * thin client holding neither. Nothing on disk says which client shows which
+ * thread, so pick among the TUIs in the session's directory: the one resumed by
+ * this id if there is one, else the only one, else the terminal that last took
+ * input — which is the one the user just typed `!cc` into.
+ */
+function daemonClientTty(pids, sessionFile) {
+  const id = rolloutIdOf(sessionFile);
+  const cwd = sessionCwd(sessionFile);
+  const clients = [];
+  for (const raw of pids) {
+    const tty = ttyOf(raw);
+    if (!tty) continue;
+    const args = ps('command', raw);
+    if (/\bapp-server\b/.test(args) || openRollouts(raw).length) continue;
+    if (id && args.includes(id)) return { tty, pid: Number(raw), via: `pid ${raw} resumed this thread` };
+    if (cwd && cwdOf(raw) !== cwd) continue;
+    let atime = 0;
+    try { atime = fs.statSync(`/dev/${tty}`).atimeMs; } catch { /* keep 0 */ }
+    clients.push({ tty, pid: Number(raw), atime });
+  }
+  if (clients.length === 1) return { ...clients[0], via: `only Codex client in ${cwd}` };
+  clients.sort((a, b) => b.atime - a.atime);
+  const [first, second] = clients;
+  if (first && Date.now() - first.atime < 60e3 && first.atime - second.atime > 2e3) {
+    return { tty: first.tty, pid: first.pid, via: `Codex client with the latest input (pid ${first.pid})` };
   }
   return null;
 }

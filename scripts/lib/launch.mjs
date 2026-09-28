@@ -13,9 +13,14 @@ function shellQuote(text) {
   return `'${String(text).replace(/'/g, `'\\''`)}'`;
 }
 
-/** The shell one-liner that reopens a session, in whichever harness owns it. */
-export function resumeCommand(sessionId, cwd, agent = 'claude') {
-  return `cd ${shellQuote(cwd)} && ${get(agent).resumeArgv(sessionId).join(' ')}`;
+/**
+ * The shell one-liner that reopens a session, in whichever harness owns it.
+ * `prompt` starts it working straight away, where the harness takes one.
+ */
+export function resumeCommand(sessionId, cwd, agent = 'claude', prompt = null) {
+  const harness = get(agent);
+  const start = prompt && harness.promptArgv ? ` ${harness.promptArgv(prompt).map(shellQuote).join(' ')}` : '';
+  return `cd ${shellQuote(cwd)} && ${harness.resumeArgv(sessionId).join(' ')}${start}`;
 }
 
 function run(cmd, args) {
@@ -75,8 +80,8 @@ export function openInZed(command) {
  * Open the resumed session in a new Terminal.app window. Returns false if the
  * terminal could not be driven, so the caller can fall back to printing.
  */
-export function openInTerminal(sessionId, cwd, agent = 'claude') {
-  const command = appleQuote(resumeCommand(sessionId, cwd, agent));
+export function openInTerminal(sessionId, cwd, agent = 'claude', prompt = null) {
+  const command = appleQuote(resumeCommand(sessionId, cwd, agent, prompt));
   const script = `tell application "Terminal"\n  activate\n  do script "${command}"\nend tell`;
   return osascript(script);
 }
@@ -87,8 +92,8 @@ export function openInTerminal(sessionId, cwd, agent = 'claude') {
  * terminal is running. Returns a short description of what it did, or null if
  * nothing here can be driven and the caller should print the command instead.
  */
-export function openAlongside(sessionId, cwd, agent = 'claude') {
-  const command = resumeCommand(sessionId, cwd, agent);
+export function openAlongside(sessionId, cwd, agent = 'claude', prompt = null) {
+  const command = resumeCommand(sessionId, cwd, agent, prompt);
   const login = [process.env.SHELL || '/bin/sh', '-lc', command];
 
   if (process.env.TMUX) {
@@ -118,7 +123,7 @@ export function openAlongside(sessionId, cwd, agent = 'claude') {
         'end tell';
       if (osascript(script)) return 'opened a new iTerm tab';
     }
-    if (openInTerminal(sessionId, cwd, agent)) return 'opened a new Terminal window';
+    if (openInTerminal(sessionId, cwd, agent, prompt)) return 'opened a new Terminal window';
   }
 
   for (const term of [process.env.SWITCHBOARD_TERMINAL, 'x-terminal-emulator', 'kitty', 'wezterm', 'alacritty', 'gnome-terminal']) {

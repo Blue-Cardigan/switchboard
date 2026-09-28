@@ -15,7 +15,7 @@ function parse(argv) {
   const rest = [];
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (arg === '--to' || arg === '--from' || arg === '--cwd') { flags[arg.slice(2)] = argv[++i]; continue; }
+    if (['--to', '--from', '--cwd', '--source', '--prompt'].includes(arg)) { flags[arg.slice(2)] = argv[++i]; continue; }
     if (arg.startsWith('--')) { flags[arg.slice(2)] = true; continue; }
     rest.push(arg);
   }
@@ -41,7 +41,11 @@ async function main() {
   if (!target.capabilities.write) throw new Error(`${target.label} cannot be handed a conversation.`);
 
   const cwd = flags.cwd ? path.resolve(String(flags.cwd)) : process.cwd();
-  const live = source.live(cwd);
+  // A hook already knows the exact file; guessing from the directory could pick
+  // a neighbouring session.
+  const live = flags.source
+    ? { id: source.sessionIdOf?.(flags.source) ?? null, source: String(flags.source), cwd, via: 'named file' }
+    : source.live(cwd);
   if (!live) throw new Error(`No ${source.label} conversation found for ${cwd}.`);
 
   process.stderr.write(`switchboard → ${target.id} (reading this ${source.label} conversation, ${live.via})…\n`);
@@ -70,19 +74,19 @@ async function main() {
   const hint = written.hint ? `\n  ${written.hint}` : '';
 
   if (flags.print) {
-    console.log(`${line}\n  ${resumeCommand(written.id, cwd, target.id)}${hint}`);
+    console.log(`${line}\n  ${resumeCommand(written.id, cwd, target.id, flags.prompt || null)}${hint}`);
     return;
   }
 
   if (written.hint) {
     // Opening a pane on a missing command just flashes an error and closes it.
-    console.log(`${line}\n  ${written.hint}\n  then: ${resumeCommand(written.id, cwd, target.id)}`);
+    console.log(`${line}\n  ${written.hint}\n  then: ${resumeCommand(written.id, cwd, target.id, flags.prompt || null)}`);
     return;
   }
 
-  const how = openAlongside(written.id, cwd, target.id);
+  const how = openAlongside(written.id, cwd, target.id, flags.prompt || null);
   if (how) console.log(`${line}\n  ${how} — ${source.label} is still running here.`);
-  else console.log(`${line}\n  nothing here can open a pane; run this yourself:\n  ${resumeCommand(written.id, cwd, target.id)}`);
+  else console.log(`${line}\n  nothing here can open a pane; run this yourself:\n  ${resumeCommand(written.id, cwd, target.id, flags.prompt || null)}`);
 }
 
 main().catch((err) => { console.error(err.message); process.exitCode = 1; });
