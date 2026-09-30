@@ -23,6 +23,17 @@ export function resumeCommand(sessionId, cwd, agent = 'claude', prompt = null) {
   return `cd ${shellQuote(cwd)} && ${harness.resumeArgv(sessionId).join(' ')}${start}`;
 }
 
+/** Open a local Codex thread in the ChatGPT desktop app. */
+export function desktopLink(sessionId, agent = 'codex') {
+  if (agent !== 'codex' || !/^[0-9a-f-]{36}$/i.test(sessionId)) return null;
+  return `codex://threads/${sessionId}`;
+}
+
+export function openDesktop(sessionId, agent = 'codex') {
+  const link = desktopLink(sessionId, agent);
+  return process.platform === 'darwin' && link && run('open', ['-a', 'ChatGPT', link]);
+}
+
 function run(cmd, args) {
   try {
     execFileSync(cmd, args, { stdio: ['ignore', 'ignore', 'pipe'] });

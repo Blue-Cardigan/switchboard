@@ -8,7 +8,7 @@
 // no way to take a terminal over, by opening the new session alongside.
 import path from 'node:path';
 import { get, host, ids } from './lib/harness/index.mjs';
-import { openAlongside, resumeCommand } from './lib/launch.mjs';
+import { desktopLink, openAlongside, openDesktop, resumeCommand } from './lib/launch.mjs';
 
 function parse(argv) {
   const flags = {};
@@ -72,9 +72,10 @@ async function main() {
   // A harness that is not installed still gets a staged handoff — the command
   // is the same one, and it works the moment the binary is there.
   const hint = written.hint ? `\n  ${written.hint}` : '';
+  const link = flags.app && !flags.prompt ? desktopLink(written.id, target.id) : null;
 
   if (flags.print) {
-    console.log(`${line}\n  ${resumeCommand(written.id, cwd, target.id, flags.prompt || null)}${hint}`);
+    console.log(`${line}\n  ${link || resumeCommand(written.id, cwd, target.id, flags.prompt || null)}${hint}`);
     return;
   }
 
@@ -84,6 +85,10 @@ async function main() {
     return;
   }
 
+  if (link && !flags.prompt && openDesktop(written.id, target.id)) {
+    console.log(`${line}\n  opened ChatGPT desktop — ${source.label} is still running here.`);
+    return;
+  }
   const how = openAlongside(written.id, cwd, target.id, flags.prompt || null);
   if (how) console.log(`${line}\n  ${how} — ${source.label} is still running here.`);
   else console.log(`${line}\n  nothing here can open a pane; run this yourself:\n  ${resumeCommand(written.id, cwd, target.id, flags.prompt || null)}`);

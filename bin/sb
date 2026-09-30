@@ -4,6 +4,7 @@
 #?   sb to <harness>      hand this conversation to that harness and open it
 #?                        beside this one (claude, codex, antigravity, gemini,
 #?                        opencode, goose, crush, aider, qwen)
+#?                        --app opens Codex threads in ChatGPT desktop
 #?   sb fork              duplicate this conversation into a side chat here
 #?                        --model <id> gives the copy a different model
 #?   sb list              which harnesses are registered, installed, and can do what

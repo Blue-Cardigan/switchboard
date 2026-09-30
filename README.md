@@ -93,6 +93,10 @@ sb doctor         # check hook, wrapper, mapping, ledgers and CLI versions
 ```
 
 `sb to` always opens alongside and leaves the harness you are in running.
+`sb to codex --app` opens the imported thread in ChatGPT desktop on macOS.
+On a Claude usage limit, the automatic handoff uses this app route when its
+"start automatically" setting is off. If the app cannot open, it falls back
+to the terminal route. `--print --app` prints the direct thread link.
 
 Nine harnesses are registered. Five of them — Claude Code, Codex, Antigravity, Gemini CLI
 and OpenCode — switchboard can read *out* of as well as into, because their conversation stores are

@@ -17,7 +17,10 @@ function show(c) {
     return;
   }
   const to = s.target === 'recent' ? 'the other harness used most recently in this directory' : s.target;
-  console.log(`On usage limit: open this conversation in ${to}, beside the limited session,\n` +
+  const destination = s.target === 'codex' && !s.start && process.platform === 'darwin'
+    ? 'ChatGPT desktop (Codex)'
+    : to;
+  console.log(`On usage limit: open this conversation in ${destination}, beside the limited session,\n` +
     `  and ${s.start ? 'have it carry on straight away' : 'wait for you to prompt it'}.`);
   console.log(`  config: ${config.CONFIG_PATH}`);
 }
