@@ -13,7 +13,7 @@
 #?   sb doctor            check hooks, wrapper, mappings, ledgers and CLI versions
 #?   sb where             which harness this command is running inside
 #?   sb limit             what happens when this harness hits its usage limit
-#?                        on | off, to <harness|recent>, start on | off
+#?                        on | off, to <harness|counterpart|recent>, start on | off
 #?
 #? Add --print to any of these to see the command instead of opening anything,
 #? and --cwd DIR to work on a different directory.

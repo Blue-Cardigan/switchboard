@@ -67,6 +67,10 @@ export function codexTurnHitLimit(file) {
  */
 export async function pickTarget(source, cwd, preference) {
   const usable = (h) => h && h.id !== source && h.capabilities.write && !h.legacy && (!h.bin || onPath(h.bin));
+  if (preference === 'counterpart') {
+    const other = harnesses[COUNTERPART[source]];
+    return usable(other) ? other.id : null;
+  }
   if (preference && preference !== 'recent') {
     const named = harnesses[preference];
     return usable(named) ? named.id : null;

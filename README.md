@@ -64,6 +64,7 @@ the limit resets.
 sb limit                  # show the current setting
 sb limit off              # turn it off (sb limit on to turn it back on)
 sb limit to codex         # always hand it to one harness…
+sb limit to counterpart   # Claude → Codex, Codex → Claude
 sb limit to recent        # …or to the one you used most recently here (the default)
 sb limit start on         # have the new session carry on by itself instead of waiting
 ```

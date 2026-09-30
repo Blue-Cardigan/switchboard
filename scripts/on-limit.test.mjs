@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { codexTurnHitLimit } from './on-limit.mjs';
+import { codexTurnHitLimit, pickTarget } from './on-limit.mjs';
 
 function rollout(...payloads) {
   const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sb-limit-')), 'rollout.jsonl');
@@ -27,4 +27,9 @@ test('only the last turn counts: a later successful turn clears it', () => {
 test('other errors and missing files are not a limit', () => {
   assert.equal(codexTurnHitLimit(rollout({ type: 'task_complete', error: { codex_error_info: 'server_error' } })), false);
   assert.equal(codexTurnHitLimit('/nonexistent/rollout.jsonl'), false);
+});
+
+test('counterpart target works in both directions', async () => {
+  assert.equal(await pickTarget('claude', process.cwd(), 'counterpart'), 'codex');
+  assert.equal(await pickTarget('codex', process.cwd(), 'counterpart'), 'claude');
 });

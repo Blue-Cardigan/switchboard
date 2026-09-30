@@ -4,6 +4,7 @@
 //   sb limit                   show the current setting
 //   sb limit on | off          hand the conversation on automatically, or not
 //   sb limit to <harness>      always hand it to that harness
+//   sb limit to counterpart    claude → codex, codex → claude
 //   sb limit to recent         hand it to whichever other harness you used last here
 //   sb limit start on | off    have the new session carry on by itself, or wait for you
 import * as config from './lib/config.mjs';
@@ -16,7 +17,8 @@ function show(c) {
     console.log('On usage limit: do nothing (sb limit on to enable).');
     return;
   }
-  const to = s.target === 'recent' ? 'the other harness used most recently in this directory' : s.target;
+  const to = s.target === 'recent' ? 'the other harness used most recently in this directory'
+    : s.target === 'counterpart' ? 'the other side (Claude Code ↔ Codex)' : s.target;
   const destination = s.target === 'codex' && !s.start && process.platform === 'darwin'
     ? 'ChatGPT desktop (Codex)'
     : to;
@@ -40,15 +42,15 @@ try {
     if (verb === 'on' || verb === 'off') c.onLimit.enabled = verb === 'on';
     else if (verb === 'start') c.onLimit.start = toggle(value, 'sb limit start');
     else if (verb === 'to') {
-      if (!value) throw new Error(`sb limit to takes recent or a harness: ${ids().join(', ')}.`);
-      if (value !== 'recent') {
+      if (!value) throw new Error(`sb limit to takes counterpart, recent, or a harness: ${ids().join(', ')}.`);
+      if (value !== 'recent' && value !== 'counterpart') {
         const h = harnesses[value];
         if (!h) throw new Error(`Unknown harness "${value}". Known: ${ids().join(', ')}.`);
         if (!h.capabilities.write) throw new Error(`${h.label} cannot be handed a conversation.`);
         if (h.bin && !onPath(h.bin)) console.log(`note: ${h.bin} is not installed here yet.`);
       }
       c.onLimit.target = value;
-    } else throw new Error(`Unknown: sb limit ${verb}. Try on, off, to <harness|recent>, start on|off.`);
+    } else throw new Error(`Unknown: sb limit ${verb}. Try on, off, to <harness|counterpart|recent>, start on|off.`);
     config.save(c);
     show(c);
   }
