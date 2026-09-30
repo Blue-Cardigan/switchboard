@@ -6,8 +6,9 @@
 //   Codex        Stop, with the rollout's last turn ending in
 //                usage_limit_exceeded                             node on-limit.mjs codex
 //
-// Opened beside, never in place: the limited session stays where it is, to be
-// resumed when its limit resets. Must fail open and stay quiet — this runs at
+// CLI sessions replace their terminal when the wrapper and exact terminal are
+// available. Desktop sessions open in the counterpart app. The limited source
+// transcript remains available to resume when its limit resets. Must fail open — this runs at
 // the end of every failed turn in every project.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -135,6 +136,7 @@ async function main() {
   const args = [HANDOFF, '--to', target, '--from', source, '--cwd', cwd, '--source', file];
   if (settings.start) args.push('--prompt', settings.prompt);
   else if (surface === 'desktop') args.push('--app');
+  else args.push('--replace');
   const run = spawnSync(process.execPath, args, { encoding: 'utf8', timeout: 110e3 });
   log(`${source} ${surface} hit its limit (${event.error || 'usage_limit_exceeded'}) in ${cwd} → ${target}` +
     `${settings.start ? ' (started)' : ''}: ${(run.stdout || run.stderr || '').trim().replace(/\n/g, ' | ')}`);

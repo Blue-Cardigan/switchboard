@@ -55,15 +55,18 @@ one over, and `cx --alongside` still opens the same conversation in Codex beside
 
 ## When you hit a usage limit
 
-On by default. When Claude Code or Codex stops because its usage limit is reached, the
-conversation opens in another harness beside it — a new Zed/iTerm/tmux pane, the same way
-`--alongside` does. The limited session is left where it is, so you can go back to it once
-the limit resets.
+On by default. When Claude Code or Codex stops because its usage limit is reached,
+Switchboard imports the conversation into the counterpart. For CLI sessions it closes
+the limited agent and resumes the counterpart in the **same terminal slot**, including
+Zed, when the shell wrapper is active and the source terminal can be identified exactly.
+Otherwise it opens a new pane. The limited transcript remains saved for later resumption.
 
 Desktop sessions open in the other desktop app; CLI sessions open in the other CLI.
 The Claude desktop route uses `claude --desktop --resume UUID`; the ChatGPT route
 uses `codex://threads/UUID`. If a desktop launch fails, Switchboard tries a CLI
 window. `sb limit start on` starts the target in a CLI session.
+Automatic in-place replacement waits for your next prompt in the target. With
+`sb limit start on`, the new session runs alongside instead.
 
 ```bash
 sb limit                  # show the current setting

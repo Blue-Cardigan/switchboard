@@ -7,9 +7,55 @@
 // is the general path: it works for every pair, including the ones that have
 // no way to take a terminal over, by opening the new session alongside.
 import path from 'node:path';
+import { execFileSync, spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { get, host, ids } from './lib/harness/index.mjs';
 import { desktopResumeCommand, openAlongside, openDesktop, resumeCommand } from './lib/launch.mjs';
 import { rememberSurface, sourceSurface } from './lib/surface.mjs';
+import { wrapperActive } from './lib/agentContext.mjs';
+import { claudeProcess } from './lib/claudeSession.mjs';
+import { resolveCodexTty } from './lib/currentSession.mjs';
+
+const PENDING = fileURLToPath(new URL('./pending.mjs', import.meta.url));
+
+export function canReplaceInPlace(source, target, proc, wrapped) {
+  if (!wrapped || !proc?.pid || !proc.tty) return false;
+  if (!((source === 'claude' && target === 'codex') ||
+        (source === 'codex' && target === 'claude'))) return false;
+  return source !== 'codex' || !proc.via?.startsWith('Codex client with the latest input');
+}
+
+function inPlaceSource(source, file) {
+  if (source === 'claude') {
+    const proc = claudeProcess();
+    return proc?.tty ? proc : null;
+  }
+  if (source === 'codex') {
+    const proc = resolveCodexTty(file);
+    return proc;
+  }
+  return null;
+}
+
+function replaceInPlace(source, file, target, written, cwd) {
+  const proc = inPlaceSource(source, file);
+  // Input recency is only a guess when several Codex clients share a daemon.
+  // Never close a client on that basis.
+  if (!canReplaceInPlace(source, target, proc, wrapperActive())) return false;
+  try {
+    execFileSync(process.execPath, [PENDING, 'stage', proc.tty, target, written, cwd]);
+    // Let the hook return before stopping its parent. The wrapper claims the
+    // staged transcript when the original CLI releases this terminal.
+    const child = spawn('sh', ['-c', 'sleep 0.8; kill -TERM "$1" 2>/dev/null', 'sh', String(proc.pid)], {
+      detached: true, stdio: 'ignore',
+    });
+    child.unref();
+    rememberSurface(target, written, 'cli');
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function parse(argv) {
   const flags = {};
@@ -95,10 +141,17 @@ async function main() {
     console.log(`${line}\n  opened ${target.id === 'codex' ? 'ChatGPT' : 'Claude'} desktop — ${source.label} is still running here.`);
     return;
   }
+  if (flags.replace && !flags.prompt && !desktopCommand && !written.pending &&
+      replaceInPlace(source.id, live.source, target.id, written.id, cwd)) {
+    console.log(`${line}\n  replacing this CLI session in the same terminal.`);
+    return;
+  }
   const how = openAlongside(written.id, cwd, target.id, flags.prompt || null);
   if (how) rememberSurface(target.id, written.id, 'cli');
   if (how) console.log(`${line}\n  ${how} — ${source.label} is still running here.`);
   else console.log(`${line}\n  nothing here can open a pane; run this yourself:\n  ${resumeCommand(written.id, cwd, target.id, flags.prompt || null)}`);
 }
 
-main().catch((err) => { console.error(err.message); process.exitCode = 1; });
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((err) => { console.error(err.message); process.exitCode = 1; });
+}
