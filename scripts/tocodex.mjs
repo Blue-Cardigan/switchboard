@@ -13,7 +13,8 @@ import { projectDirFor } from './lib/claudeTranscript.mjs';
 import { readTurnsSince, renderBriefing } from './lib/transcript.mjs';
 import { listSessions } from './lib/codexRollout.mjs';
 import { listDesktopSessions, materialiseDesktopSession, pickDesktopSession } from './lib/claudeDesktop.mjs';
-import { openAlongside, resumeCommand } from './lib/launch.mjs';
+import { desktopResumeCommand, openAlongside, openDesktop, resumeCommand } from './lib/launch.mjs';
+import { rememberSurface, sourceSurface } from './lib/surface.mjs';
 
 function parse(argv) {
   const flags = {};
@@ -61,12 +62,20 @@ async function fromDesktop(flags, selector) {
   const local = materialiseDesktopSession(chosen, cwd);
   const { threadId, reused } = await importClaudeSession(local.path, cwd);
   const line = `desktop ${chosen.title || chosen.sessionId} → codex ${threadId.slice(0, 8)}${reused ? ' (already imported)' : ''}`;
+  const app = !flags.cli;
+  const desktopCommand = app ? desktopResumeCommand(threadId, cwd, 'codex') : null;
 
   if (flags.print) {
-    console.log(`${line}\n  ${resumeCommand(threadId, cwd, 'codex')}`);
+    console.log(`${line}\n  ${desktopCommand || resumeCommand(threadId, cwd, 'codex')}`);
+    return;
+  }
+  if (desktopCommand && openDesktop(threadId, cwd, 'codex')) {
+    rememberSurface('codex', threadId, 'desktop');
+    console.log(`${line}\n  opened ChatGPT desktop.`);
     return;
   }
   const how = openAlongside(threadId, cwd, 'codex');
+  if (how) rememberSurface('codex', threadId, 'cli');
   if (how) console.log(`${line}\n  ${how}.`);
   else console.log(`${line}\n  run this to pick it up:\n  ${resumeCommand(threadId, cwd, 'codex')}`);
 }
@@ -184,8 +193,29 @@ async function main() {
     ? ` · ${Math.round(originalBytes / 1000)} kB → ${Math.round(importedBytes / 1000)} kB`
     : '';
   const line = `claude ${path.basename(session.source).slice(0, 8)} → codex ${threadId.slice(0, 8)}${reused ? ' (already imported)' : ''}${compacted}`;
+  const sourceId = path.basename(session.source, '.jsonl');
+  const app = !flags.cli && (flags.app || sourceSurface('claude', sourceId, session.source) === 'desktop');
+  const desktopCommand = app ? desktopResumeCommand(threadId, session.cwd, 'codex') : null;
+
+  if (desktopCommand && !flags.print && openDesktop(threadId, session.cwd, 'codex')) {
+    rememberSurface('codex', threadId, 'desktop');
+    console.log(`${line}\n  opened ChatGPT desktop.`);
+    return;
+  }
+  if (desktopCommand && !flags.print) {
+    const how = openAlongside(threadId, session.cwd, 'codex');
+    if (how) rememberSurface('codex', threadId, 'cli');
+    console.log(how
+      ? `${line}\n  ${how} (desktop launch failed).`
+      : `${line}\n  desktop launch failed; run this yourself:\n  ${resumeCommand(threadId, session.cwd, 'codex')}`);
+    return;
+  }
 
   if (flags.print || (!proc?.tty && !flags.alongside)) {
+    if (flags.print) {
+      console.log(`${line}\n  ${desktopCommand || resumeCommand(threadId, session.cwd, 'codex')}`);
+      return;
+    }
     if (flags.session && !flags.print) {
       console.log(`${line}\n  opening Codex here…`);
       const child = spawn('codex', ['resume', threadId], { cwd: session.cwd, stdio: 'inherit' });
@@ -203,6 +233,7 @@ async function main() {
   // Claude Code keeps running and nothing needs to be claimed later.
   if (flags.alongside) {
     const how = openAlongside(threadId, session.cwd, 'codex');
+    if (how) rememberSurface('codex', threadId, 'cli');
     if (how) console.log(`${line}\n  ${how} — Claude Code is still running here.`);
     else console.log(`${line}\n  nothing here can open a pane; run this yourself:\n  ${resumeCommand(threadId, session.cwd, 'codex')}`);
     return;
@@ -213,6 +244,7 @@ async function main() {
     'stage', proc.tty, 'codex', threadId, session.cwd,
   ]);
   console.log(`${line}\n  staged for ${proc.tty}.`);
+  rememberSurface('codex', threadId, 'cli');
 
   if (flags.quit && proc.pid) {
     const child = spawn('sh', ['-c', `sleep 0.4; kill -TERM ${proc.pid} 2>/dev/null`], { detached: true, stdio: 'ignore' });

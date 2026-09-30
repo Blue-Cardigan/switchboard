@@ -60,6 +60,11 @@ conversation opens in another harness beside it — a new Zed/iTerm/tmux pane, t
 `--alongside` does. The limited session is left where it is, so you can go back to it once
 the limit resets.
 
+Desktop sessions open in the other desktop app; CLI sessions open in the other CLI.
+The Claude desktop route uses `claude --desktop --resume UUID`; the ChatGPT route
+uses `codex://threads/UUID`. If a desktop launch fails, Switchboard tries a CLI
+window. `sb limit start on` starts the target in a CLI session.
+
 ```bash
 sb limit                  # show the current setting
 sb limit off              # turn it off (sb limit on to turn it back on)
@@ -93,11 +98,12 @@ sb sessions 2     # reopen numbered session from that list
 sb doctor         # check hook, wrapper, mapping, ledgers and CLI versions
 ```
 
-`sb to` always opens alongside and leaves the harness you are in running.
-`sb to codex --app` opens the imported thread in ChatGPT desktop on macOS.
-On a Claude usage limit, the automatic handoff uses this app route when its
-"start automatically" setting is off. If the app cannot open, it falls back
-to the terminal route. `--print --app` prints the direct thread link.
+`sb to` leaves the harness you are in running. For Claude ↔ Codex it opens in
+the same surface as the source session; other targets open in a CLI window.
+`sb to codex --app` opens the imported thread in ChatGPT desktop on macOS;
+`sb to claude --app` opens it in Claude desktop. `--print --app` prints the
+desktop launch command. `cc` and `cx` also follow the selected session's surface;
+`--app` and `--cli` override that choice.
 
 Nine harnesses are registered. Five of them — Claude Code, Codex, Antigravity, Gemini CLI
 and OpenCode — switchboard can read *out* of as well as into, because their conversation stores are
@@ -174,7 +180,8 @@ conversations can be picked up from either CLI:
 
 ```bash
 cx --desktop      # list them
-cx --desktop 2    # hand conversation 2 to Codex, opened alongside
+cx --desktop 2    # hand conversation 2 to ChatGPT desktop
+cx --desktop 2 --cli  # open it in Codex CLI
 cc --desktop 2    # resume conversation 2 here, in Claude Code
 ```
 
@@ -183,8 +190,9 @@ from there — which also makes it resumable with `claude --resume`. `--cwd DIR`
 somewhere other than the session's own sandbox; `cc --desktop` rewrites the recorded working
 directory to match, and never overwrites a copy you have since added turns to.
 
-There is no route back into Claude desktop: its conversation list is server state, not
-something on disk.
+Imported Claude Code sessions can be resumed in Claude desktop using its
+`--desktop --resume` launch option. This creates a local Code session in the app;
+it does not merge with a pre-existing Claude chat.
 
 The ChatGPT desktop app disables its own `/import` while it is attached to the local
 app-server daemon, which is why the sync appears to run once and then never again. This is
@@ -215,8 +223,8 @@ cc "Review ticket"   # or pick a ChatGPT thread by its name
 ```
 
 Threads from the ChatGPT desktop app share Codex's session store, so they are listed and
-selectable by the name the app shows. Bringing one over starts a normal Claude Code session,
-which the Claude desktop app lists alongside its own while it is running.
+selectable by the name the app shows. Bringing one over opens a Claude desktop Code
+session, unless `--cli` is specified.
 
 Nothing has to be replaced, either. From inside Claude Code:
 

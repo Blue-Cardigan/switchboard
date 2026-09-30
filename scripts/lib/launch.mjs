@@ -29,14 +29,27 @@ export function desktopLink(sessionId, agent = 'codex') {
   return `codex://threads/${sessionId}`;
 }
 
-export function openDesktop(sessionId, agent = 'codex') {
-  const link = desktopLink(sessionId, agent);
-  return process.platform === 'darwin' && link && run('open', ['-a', 'ChatGPT', link]);
+export function desktopResumeCommand(sessionId, cwd, agent = 'codex') {
+  if (process.platform !== 'darwin') return null;
+  if (agent === 'codex') {
+    const link = desktopLink(sessionId, agent);
+    return link && `open -a ChatGPT ${shellQuote(link)}`;
+  }
+  if (agent === 'claude' && /^[0-9a-f-]{36}$/i.test(sessionId)) {
+    return `cd ${shellQuote(cwd)} && claude --desktop --resume ${sessionId}`;
+  }
+  return null;
 }
 
-function run(cmd, args) {
+export function openDesktop(sessionId, cwd, agent = 'codex') {
+  if (!desktopResumeCommand(sessionId, cwd, agent)) return false;
+  if (agent === 'codex') return run('open', ['-a', 'ChatGPT', desktopLink(sessionId, agent)]);
+  return run('claude', ['--desktop', '--resume', sessionId], { cwd, timeout: 30000 });
+}
+
+function run(cmd, args, options = {}) {
   try {
-    execFileSync(cmd, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    execFileSync(cmd, args, { stdio: ['ignore', 'ignore', 'pipe'], ...options });
     return true;
   } catch {
     return false;

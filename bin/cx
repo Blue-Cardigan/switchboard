@@ -5,6 +5,8 @@
 #?      cx --alongside  open Codex beside this session instead of replacing it
 #?                      (tmux split, or a new tab/window) and leave Claude running
 #?      cx --print      show the command instead of switching
+#?      cx --app        open the imported thread in ChatGPT desktop
+#?      cx --cli        force a Codex CLI handoff
 #?      cx --preview    show what would be imported, without switching
 #?      cx --no-quit    stage it but leave Claude Code running
 #?
@@ -40,7 +42,7 @@ if [[ $NAMED -eq 0 && " $* " != *" --desktop "* && " $* " != *" --session "* && 
 fi
 args=()
 # --alongside adds a session rather than taking this one over, so nothing closes.
-if [[ $NAMED -eq 0 && " $* " != *" --no-quit "* && " $* " != *" --alongside "* && " $* " != *" --desktop "* && " $* " != *" --session "* && " $* " != *" --preview "* && " $* " != *" --context "* && " $* " != *" --queue "* ]]; then
+if [[ $NAMED -eq 0 && " $* " != *" --no-quit "* && " $* " != *" --alongside "* && " $* " != *" --app "* && " $* " != *" --desktop "* && " $* " != *" --session "* && " $* " != *" --preview "* && " $* " != *" --context "* && " $* " != *" --queue "* ]]; then
   args+=(--quit)
 fi
 for a in "$@"; do [[ "$a" == "--no-quit" ]] || args+=("$a"); done

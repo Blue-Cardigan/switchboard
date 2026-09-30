@@ -6,6 +6,8 @@
 #?      cc --alongside  open Claude Code beside this session instead of replacing it
 #?                      (tmux split, or a new tab/window) and leave Codex running
 #?      cc --print      show the command instead of switching
+#?      cc --app        open the imported conversation in Claude desktop
+#?      cc --cli        force a Claude Code CLI handoff
 #?      cc --no-quit    stage it but leave Codex running (exit it yourself)
 #?
 #?      cc --fork       inside Claude Code: duplicate THIS conversation into a
@@ -85,7 +87,7 @@ fi
 
 args=(handoff --replace)
 # --alongside adds a session rather than taking this one over, so nothing closes.
-if [[ " $* " != *" --no-quit "* && " $* " != *" --alongside "* && " $* " != *" --window "* ]]; then
+if [[ " $* " != *" --no-quit "* && " $* " != *" --alongside "* && " $* " != *" --window "* && " $* " != *" --app "* ]]; then
   args+=(--quit)
 fi
 for a in "$@"; do [[ "$a" == "--no-quit" ]] || args+=("$a"); done

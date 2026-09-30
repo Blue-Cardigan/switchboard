@@ -18,6 +18,7 @@ import { LOG_DIR, ROOT } from './lib/state.mjs';
 import { harnesses } from './lib/harness/index.mjs';
 import { onPath } from './lib/proc.mjs';
 import { rolloutForSession } from './lib/currentSession.mjs';
+import { sourceSurface } from './lib/surface.mjs';
 
 const HANDOFF = fileURLToPath(new URL('./handoff.mjs', import.meta.url));
 const FIRED = path.join(ROOT, 'limit-fired.json');
@@ -130,11 +131,12 @@ async function main() {
     return;
   }
 
+  const surface = sourceSurface(source, event.session_id || path.basename(file, '.jsonl'), file);
   const args = [HANDOFF, '--to', target, '--from', source, '--cwd', cwd, '--source', file];
   if (settings.start) args.push('--prompt', settings.prompt);
-  else if (target === 'codex') args.push('--app');
+  else if (surface === 'desktop') args.push('--app');
   const run = spawnSync(process.execPath, args, { encoding: 'utf8', timeout: 110e3 });
-  log(`${source} hit its limit (${event.error || 'usage_limit_exceeded'}) in ${cwd} → ${target}` +
+  log(`${source} ${surface} hit its limit (${event.error || 'usage_limit_exceeded'}) in ${cwd} → ${target}` +
     `${settings.start ? ' (started)' : ''}: ${(run.stdout || run.stderr || '').trim().replace(/\n/g, ' | ')}`);
 }
 

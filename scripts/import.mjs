@@ -15,7 +15,8 @@ import { desktopRoot, listDesktopSessions, materialiseDesktopSession, pickDeskto
 import { detectCurrentSession, findCodexAncestor, openRollouts, resolveCodexTty } from './lib/currentSession.mjs';
 import { ROOT } from './lib/state.mjs';
 import { currentAgent, wrapperActive } from './lib/agentContext.mjs';
-import { openAlongside, resumeCommand } from './lib/launch.mjs';
+import { desktopResumeCommand, openAlongside, openDesktop, resumeCommand } from './lib/launch.mjs';
+import { rememberSurface, sourceSurface } from './lib/surface.mjs';
 
 function parse(argv) {
   const flags = {};
@@ -118,7 +119,7 @@ async function handoff(verb, flags, sessions, cwd, rest = []) {
   // --alongside (--window is the old name) opens Claude next to Codex instead of
   // taking its terminal, so nothing gets staged and nothing gets closed.
   const alongside = Boolean(flags.alongside || flags.window);
-  const wantsReplace = !alongside && (flags.replace || (wrapperInstalled && !flags.print));
+  const wantsReplace = !alongside && !flags.app && (flags.replace || (wrapperInstalled && !flags.print));
   let staged = 0;
   let quitting = false;
 
@@ -126,9 +127,17 @@ async function handoff(verb, flags, sessions, cwd, rest = []) {
     const { written, target: dir, counts, trimmed } = await convert(target, flags);
     const line = `${target.sessionId.slice(0, 8)} (${target.via || 'selected'}) → claude ${written.sessionId.slice(0, 8)}` +
       ` · ${written.rows} turns, ${counts.commands} commands${trimmed ? ', trimmed' : ''}`;
+    const app = !flags.cli && (flags.app || sourceSurface('codex', target.sessionId, target.file) === 'desktop');
+    const desktopCommand = app ? desktopResumeCommand(written.sessionId, dir, 'claude') : null;
 
     if (flags.print) {
-      console.log(`${line}\n  ${resumeCommand(written.sessionId, dir)}`);
+      console.log(`${line}\n  ${desktopCommand || resumeCommand(written.sessionId, dir)}`);
+      continue;
+    }
+
+    if (desktopCommand && openDesktop(written.sessionId, dir, 'claude')) {
+      rememberSurface('claude', written.sessionId, 'desktop');
+      console.log(`${line}\n  opened Claude desktop.`);
       continue;
     }
 
@@ -140,6 +149,7 @@ async function handoff(verb, flags, sessions, cwd, rest = []) {
           'stage', terminal.tty, 'claude', written.sessionId, dir,
         ]);
         console.log(`${line}\n  staged for ${terminal.tty} (${terminal.via}).`);
+        rememberSurface('claude', written.sessionId, 'cli');
         staged += 1;
         if (flags.quit && terminal.pid) {
           // Detach the signal so Codex dying cannot take this process with it.
@@ -157,6 +167,7 @@ async function handoff(verb, flags, sessions, cwd, rest = []) {
     // Anything that is not an explicit --print ends up beside this session: the
     // old Terminal.app-only fallback ignored Zed, tmux and iTerm.
     const how = openAlongside(written.sessionId, dir);
+    if (how) rememberSurface('claude', written.sessionId, 'cli');
     // Say what is still running *here*, which is not always Codex: this command
     // is also reachable from inside Claude Code and from a bare shell.
     const host = currentAgent();
