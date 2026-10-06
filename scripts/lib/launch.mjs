@@ -29,6 +29,16 @@ export function desktopLink(sessionId, agent = 'codex') {
   return `codex://threads/${sessionId}`;
 }
 
+/**
+ * Inverse of desktopLink: accept a pasted `codex://threads/<id>` link (the form
+ * the ChatGPT desktop app copies) and return the bare thread id. Anything else
+ * passes through unchanged, so plain ids, prefixes and thread names still work.
+ */
+export function threadIdFromLink(selector) {
+  const m = /^codex:\/\/threads\/([0-9a-f-]+)(?:[/?#].*)?$/i.exec(String(selector).trim());
+  return m ? m[1].toLowerCase() : selector;
+}
+
 export function desktopResumeCommand(sessionId, cwd, agent = 'codex') {
   if (process.platform !== 'darwin') return null;
   if (agent === 'codex') {

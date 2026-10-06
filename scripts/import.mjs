@@ -15,7 +15,7 @@ import { desktopRoot, listDesktopSessions, materialiseDesktopSession, pickDeskto
 import { detectCurrentSession, findCodexAncestor, openRollouts, resolveCodexTty } from './lib/currentSession.mjs';
 import { ROOT } from './lib/state.mjs';
 import { currentAgent, wrapperActive } from './lib/agentContext.mjs';
-import { desktopResumeCommand, openAlongside, openDesktop, resumeCommand } from './lib/launch.mjs';
+import { desktopResumeCommand, openAlongside, openDesktop, resumeCommand, threadIdFromLink } from './lib/launch.mjs';
 import { rememberSurface, sourceSurface } from './lib/surface.mjs';
 
 function parse(argv) {
@@ -58,7 +58,7 @@ function pick(sessions, flags, rest, cwd) {
     if (!here) throw new Error(`No Codex session recorded for ${path.resolve(cwd)}. Try "list".`);
     return here;
   }
-  const selector = rest[0];
+  const selector = rest[0] && threadIdFromLink(rest[0]);
   if (!selector || flags.last) return sessions[0];
   if (/^\d+$/.test(selector)) {
     const chosen = sessions[Number(selector) - 1];

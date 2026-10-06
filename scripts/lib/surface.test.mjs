@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { sourceSurface } from './surface.mjs';
-import { desktopResumeCommand } from './launch.mjs';
+import { desktopLink, desktopResumeCommand, threadIdFromLink } from './launch.mjs';
 
 test('Codex rollout originator selects its launch surface', (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sb-surface-'));
@@ -24,4 +24,12 @@ test('desktop launch commands target the corresponding app', () => {
     `cd '/tmp/my project' && claude --desktop --resume ${id}`);
   assert.equal(desktopResumeCommand(id, '/tmp/my project', 'codex'),
     `open -a ChatGPT 'codex://threads/${id}'`);
+});
+
+test('threadIdFromLink accepts pasted codex:// thread links', () => {
+  const id = '01a111e8-78cf-7ab2-b6a6-2e85e5af752a';
+  assert.equal(threadIdFromLink(desktopLink(id)), id);
+  assert.equal(threadIdFromLink(`  codex://threads/${id.toUpperCase()}?x=1 `), id);
+  assert.equal(threadIdFromLink(id), id);
+  assert.equal(threadIdFromLink('council minutes'), 'council minutes');
 });
