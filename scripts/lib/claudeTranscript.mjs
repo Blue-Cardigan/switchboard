@@ -44,7 +44,7 @@ export function isPristineAuthored(file) {
 }
 
 /** Claude Code rebuilds API messages from these rows, so same-role runs are merged. */
-function normalise(entries) {
+export function normalise(entries) {
   const merged = [];
   for (const entry of entries) {
     const last = merged[merged.length - 1];
@@ -101,32 +101,13 @@ export function buildPreamble(meta, counts, truncated, from = { name: 'Codex', u
 }
 
 /**
- * Write a Claude Code transcript that `claude --resume <id>` will load as real history.
+ * Claude Code transcript rows for alternating user/assistant entries, chained from
+ * `parentUuid`. `base` carries the fields every row repeats (sessionId, cwd, …).
  */
-export function writeTranscript({ cwd, entries, preamble, gitBranch = '', version = '2.1.251' }) {
-  const dir = projectDirFor(cwd);
-  fs.mkdirSync(dir, { recursive: true });
-
-  const sessionId = crypto.randomUUID();
-  const timestamp = new Date().toISOString();
-  const base = {
-    isSidechain: false,
-    userType: 'external',
-    entrypoint: 'cli',
-    cwd: path.resolve(cwd),
-    sessionId,
-    version,
-    gitBranch,
-  };
-
+export function buildRows(entries, { base, parentUuid = null, timestamp = new Date().toISOString() }) {
   const rows = [];
-  let parentUuid = null;
-  const all = preamble
-    ? [{ role: 'user', text: `${preamble}\n\n${entries[0]?.role === 'user' ? entries[0].text : ''}`.trim() },
-       ...(entries[0]?.role === 'user' ? entries.slice(1) : entries)]
-    : entries;
-
-  for (const entry of all) {
+  const { sessionId } = base;
+  for (const entry of entries) {
     const uuid = crypto.randomUUID();
     if (entry.role === 'user') {
       rows.push({
@@ -172,6 +153,34 @@ export function writeTranscript({ cwd, entries, preamble, gitBranch = '', versio
     }
     parentUuid = uuid;
   }
+  return rows;
+}
+
+/**
+ * Write a Claude Code transcript that `claude --resume <id>` will load as real history.
+ */
+export function writeTranscript({ cwd, entries, preamble, gitBranch = '', version = '2.1.251' }) {
+  const dir = projectDirFor(cwd);
+  fs.mkdirSync(dir, { recursive: true });
+
+  const sessionId = crypto.randomUUID();
+  const timestamp = new Date().toISOString();
+  const base = {
+    isSidechain: false,
+    userType: 'external',
+    entrypoint: 'cli',
+    cwd: path.resolve(cwd),
+    sessionId,
+    version,
+    gitBranch,
+  };
+
+  const all = preamble
+    ? [{ role: 'user', text: `${preamble}\n\n${entries[0]?.role === 'user' ? entries[0].text : ''}`.trim() },
+       ...(entries[0]?.role === 'user' ? entries.slice(1) : entries)]
+    : entries;
+
+  const rows = buildRows(all, { base, parentUuid: null, timestamp });
 
   const file = path.join(dir, `${sessionId}.jsonl`);
   fs.writeFileSync(file, `${rows.map((r) => JSON.stringify(r)).join('\n')}\n`);

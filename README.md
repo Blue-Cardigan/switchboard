@@ -242,6 +242,35 @@ cx --queue <id>    # …or into one named by id or session name
 on its next turn. Claude Code keeps running either way. `cx2cc context` is the same thing in
 the other direction.
 
+## Merging Codex threads back into Claude
+
+A conversation that started in Claude and was imported into Codex can come home:
+
+```bash
+cx2cc merge --imported            # dry run: every imported thread with new Codex turns
+cx2cc merge "Stories" --apply     # append its Codex turns to the original Claude transcript
+cx2cc merge "Stories" --apply --stop-claude --archive --open
+```
+
+Codex replays an imported conversation as `external-import-turn-N` turns and records the
+source transcript in its import ledgers, so switchboard knows where the Codex-native part
+starts and which Claude conversation it belongs to. Those turns are appended to that
+transcript, chained to its last row, so the conversation keeps its title and place in Claude
+rather than reappearing as a copy. A thread that began in Codex is imported as a new Claude
+conversation instead.
+
+Merging is repeatable: a cursor per thread (`~/.claude/switchboard/merged.json`) means a
+thread that carries on in Codex can be merged again, and only the new turns are added. Every
+appended transcript is backed up first under `~/.claude/switchboard/backups/`. Long Codex runs
+are fitted to `--budget` characters (default 200k): the opening exchange and the newest tail
+are kept and the middle is marked as omitted.
+
+It will not write while either side is busy: a Codex thread mid-turn is skipped, and so is a
+Claude conversation that a live Claude process still holds, because that process would keep
+appending from its own in-memory end and orphan the merged turns. `--stop-claude` closes such
+processes, but only when they report themselves idle. `--archive` archives the thread in Codex
+once it lives in Claude, and `--open` resumes it in Claude desktop.
+
 `/switchboard:import` pulls a Codex session into the Claude session you are already in,
 instead of replacing it.
 

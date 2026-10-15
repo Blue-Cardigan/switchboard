@@ -102,6 +102,54 @@ export function shellCommand(command) {
   return raw.replace(/\s+/g, ' ').trim();
 }
 
+// Codex injects harness scaffolding as user-role messages: the environment and
+// AGENTS.md preamble, heartbeats, and the desktop app's page-context tag stuck to
+// the front of a real prompt. None of it is anything the user said.
+const SCAFFOLD = /^\s*(<(environment_context|user_instructions|user_shell|switchboard|heartbeat)\b|# AGENTS\.md instructions)/i;
+const PAGE_TAG = /^\s*<external_codex_apps_open_page>[\s\S]*?<\/external_codex_apps_open_page>\s*/;
+
+/** A user message as the user wrote it, or '' when it is harness scaffolding. */
+export function userText(text) {
+  if (SCAFFOLD.test(text)) return '';
+  return text.replace(PAGE_TAG, '').trim();
+}
+
+const short = (p) => p.split('/').slice(-2).join('/');
+
+/**
+ * The activity-trail lines one rollout record contributes. The CLI reports work as
+ * completed items; the ChatGPT desktop app instead runs shell commands through a
+ * code-mode `exec` tool (JavaScript calling tools.exec_command) and reports patches
+ * as patch_apply_end, so both shapes are read.
+ */
+export function activityOf(entry) {
+  const payload = entry.payload || {};
+  if (entry.type === 'event_msg' && payload.type === 'item_completed') {
+    const item = payload.item || {};
+    if (item.type === 'CommandExecution') return [`$ ${shellCommand(item.command).slice(0, 160)}`];
+    if (item.type === 'FileChange') {
+      return [`~ edited ${Object.keys(item.changes || {}).map(short).join(', ').slice(0, 160)}`];
+    }
+    return [];
+  }
+  if (entry.type === 'event_msg' && payload.type === 'patch_apply_end') {
+    const paths = [...String(payload.stdout || '').matchAll(/^[AMD] (\S+)$/gm)].map((m) => short(m[1]));
+    return paths.length ? [`~ edited ${paths.join(', ').slice(0, 160)}`] : [];
+  }
+  if (entry.type === 'response_item' && payload.type === 'custom_tool_call' && payload.name === 'exec') {
+    const input = String(payload.input || '');
+    const cmds = [...input.matchAll(/exec_command\(\{\s*cmd\s*:\s*("(?:[^"\\]|\\.)*")/g)]
+      .map((m) => { try { return JSON.parse(m[1]); } catch { return m[1]; } });
+    return cmds.map((c) => `$ ${c.replace(/\s+/g, ' ').trim().slice(0, 160)}`);
+  }
+  if (entry.type === 'response_item' && payload.type === 'function_call' && /^request_user_input/.test(payload.name || '')) {
+    let questions = [];
+    try { questions = JSON.parse(payload.arguments || '{}').questions || []; } catch { /* malformed */ }
+    return questions.map((q) => `? asked: ${String(q.question || q.title || '').slice(0, 200)}`);
+  }
+  return [];
+}
+
 const MAX_MESSAGE_CHARS = 6000;
 const HEAD_EVENTS = 20;
 const TAIL_EVENTS = 500;
@@ -157,24 +205,24 @@ export async function readRollout(file, { headEvents = HEAD_EVENTS, tailEvents =
     if (entry.type === 'response_item' && payload.type === 'message') {
       const role = payload.role;
       if (role !== 'user' && role !== 'assistant') continue; // developer = harness preamble
-      const text = textOf(payload.content);
+      const raw = textOf(payload.content);
+      const text = role === 'user' ? userText(raw) : raw;
       if (!text) continue;
       counts[role] += 1;
       push({ kind: 'message', role, text: clamp(text) });
       continue;
     }
 
-    if (entry.type === 'event_msg' && payload.type === 'item_completed') {
-      const item = payload.item || {};
-      if (item.type === 'CommandExecution') {
-        counts.commands += 1;
-        push({ kind: 'activity', text: `$ ${shellCommand(item.command).slice(0, 160)}` });
-      } else if (item.type === 'FileChange') {
-        counts.fileChanges += 1;
-        // changes is a map of path -> {type, content|unified_diff}; keep paths only.
-        const paths = Object.keys(item.changes || {}).map((p) => p.split('/').slice(-2).join('/'));
-        push({ kind: 'activity', text: `~ edited ${paths.join(', ').slice(0, 160)}` });
-      }
+    if (entry.type === 'event_msg' && payload.type === 'item_completed' && payload.item?.type === 'Plan') {
+      const text = String(payload.item.text || '').trim();
+      if (text) { counts.assistant += 1; push({ kind: 'message', role: 'assistant', text: clamp(`[Codex plan]\n${text}`) }); }
+      continue;
+    }
+
+    for (const text of activityOf(entry)) {
+      if (text.startsWith('$')) counts.commands += 1;
+      else if (text.startsWith('~')) counts.fileChanges += 1;
+      push({ kind: 'activity', text });
     }
   }
 

@@ -54,7 +54,8 @@ export function desktopResumeCommand(sessionId, cwd, agent = 'codex') {
 export function openDesktop(sessionId, cwd, agent = 'codex') {
   if (!desktopResumeCommand(sessionId, cwd, agent)) return false;
   if (agent === 'codex') return run('open', ['-a', 'ChatGPT', desktopLink(sessionId, agent)]);
-  return run('claude', ['--desktop', '--resume', sessionId], { cwd, timeout: 30000 });
+  // `claude --desktop` refuses to run without a terminal, so give it a pseudo-one.
+  return run('script', ['-q', '/dev/null', 'claude', '--desktop', '--resume', sessionId], { cwd, timeout: 30000 });
 }
 
 function run(cmd, args, options = {}) {

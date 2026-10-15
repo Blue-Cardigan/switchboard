@@ -5,14 +5,10 @@
 // cannot: they reach hundreds of megabytes. Rollouts are append-only, so the
 // cursor here is a byte offset and each turn reads only what was added since.
 import fs from 'node:fs';
-import { shellCommand, textOf } from './codexRollout.mjs';
+import { activityOf, textOf, userText } from './codexRollout.mjs';
 
 const MAX_TURN_CHARS = 4000;
 const MAX_DELTA_BYTES = 32 * 1024 * 1024;
-
-// Codex replays its own preamble as user-role messages. They are harness
-// scaffolding, not anything the user said, and they are large.
-const PREAMBLE = /^\s*<(environment_context|user_instructions|user_shell|switchboard)/i;
 
 function clamp(text, limit = MAX_TURN_CHARS) {
   return text.length <= limit ? text : `${text.slice(0, limit)}\n… [truncated]`;
@@ -77,8 +73,9 @@ export function readCodexTurnsSince(file, fromByte = 0) {
     if (entry.type === 'response_item' && payload.type === 'message') {
       const role = payload.role;
       if (role !== 'user' && role !== 'assistant') continue;
-      const text = textOf(payload.content);
-      if (!text || PREAMBLE.test(text)) continue;
+      const raw = textOf(payload.content);
+      const text = role === 'user' ? userText(raw) : raw;
+      if (!text) continue;
       if (role === 'assistant') {
         turns.push({ role: 'assistant', text: clamp(`${text}${flush()}`) });
       } else {
@@ -88,15 +85,14 @@ export function readCodexTurnsSince(file, fromByte = 0) {
       continue;
     }
 
-    if (entry.type === 'event_msg' && payload.type === 'item_completed') {
-      const item = payload.item || {};
-      if (item.type === 'CommandExecution') {
-        pending.push(`$ ${shellCommand(item.command).slice(0, 160)}`);
-      } else if (item.type === 'FileChange') {
-        const paths = Object.keys(item.changes || {}).map((p) => p.split('/').slice(-2).join('/'));
-        pending.push(`~ edited ${paths.join(', ').slice(0, 160)}`);
-      }
+    // A plan is the substance of a turn, not a trail entry: keep it as prose.
+    if (entry.type === 'event_msg' && payload.type === 'item_completed' && payload.item?.type === 'Plan') {
+      const text = String(payload.item.text || '').trim();
+      if (text) turns.push({ role: 'assistant', text: clamp(`[Codex plan]\n${text}${flush()}`) });
+      continue;
     }
+
+    pending.push(...activityOf(entry));
   }
   if (pending.length) turns.push({ role: 'assistant', text: clamp(flush().trim()) });
 
