@@ -10,6 +10,8 @@
 #?   sb list              which harnesses are registered, installed, and can do what
 #?   sb sessions          recent sessions across all registered harnesses
 #?   sb sessions N        reopen numbered session from that list
+#?   sb merge-to-codex ID append new Claude turns to their original Codex thread
+#?                        --apply writes; --open opens the Codex thread
 #?   sb doctor            check hooks, wrapper, mappings, ledgers and CLI versions
 #?   sb where             which harness this command is running inside
 #?   sb limit             what happens when this harness hits its usage limit
@@ -34,6 +36,7 @@ case "$cmd" in
   fork)  exec node "$ROOT/scripts/fork.mjs" "$@" ;;
   list)  exec node "$ROOT/scripts/harnesses.mjs" "$@" ;;
   sessions) exec node "$ROOT/scripts/sessions.mjs" "$@" ;;
+  merge-to-codex) exec node "$ROOT/scripts/mergeToCodex.mjs" "$@" ;;
   doctor) exec node "$ROOT/scripts/doctor.mjs" "$@" ;;
   where) exec node "$ROOT/scripts/context.mjs" ;;
   limit) exec node "$ROOT/scripts/limit.mjs" "$@" ;;

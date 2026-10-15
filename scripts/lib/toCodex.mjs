@@ -13,7 +13,7 @@ export function codexHome() {
 }
 
 /** Minimal newline-delimited JSON-RPC client for `codex app-server`. */
-class AppServer {
+export class AppServer {
   constructor(cwd) {
     this.cwd = cwd;
     this.nextId = 1;
@@ -95,9 +95,9 @@ class AppServer {
 // one for the desktop app's Claude sync. They record the same thing under
 // different key styles, so check both — an import the ChatGPT app already did
 // should be reused rather than repeated.
-const LEDGERS = [
-  { file: 'external_agent_session_imports.json', source: 'source_path', sha: 'content_sha256', thread: 'imported_thread_id' },
-  { file: 'claude-cowork-import-history.json', source: 'sourcePath', sha: 'contentSha256', thread: 'importedThreadId' },
+export const LEDGERS = [
+  { file: 'external_agent_session_imports.json', source: 'source_path', sha: 'content_sha256', thread: 'imported_thread_id', at: 'imported_at' },
+  { file: 'claude-cowork-import-history.json', source: 'sourcePath', sha: 'contentSha256', thread: 'importedThreadId', at: 'importedAtMs' },
 ];
 
 function ledgerThreadId(sourcePath, sha) {

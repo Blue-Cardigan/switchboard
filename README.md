@@ -280,6 +280,26 @@ appending from its own in-memory end and orphan the merged turns. `--stop-claude
 processes, but only when they report themselves idle. `--archive` archives the thread in Codex
 once it lives in Claude, and `--open` resumes it in Claude desktop.
 
+## Merging Claude conversations back into Codex
+
+The same in the other direction:
+
+```bash
+sb merge-to-codex 79b453d2            # dry run: new Claude turns for that conversation's Codex thread
+sb merge-to-codex 79b453d2 --apply --open
+```
+
+A Claude conversation's Codex home is the thread it was merged from, or the thread Codex
+imported it into. Its new turns are appended as native Codex turns — commands with output,
+file changes with diffs, reads and searches — so the ChatGPT app shows them as its own. The
+thread is probed with `thread/resume` first and left alone while another writer holds it
+(open in the ChatGPT app or a Codex CLI); after appending, a fresh resume makes Codex project
+the new rows into its history, and the new turn is checked or the backup restored. Turns
+switchboard wrote are skipped in both directions, so nothing echoes.
+
+When a usage limit hands a conversation over, it now merges into that home in either
+direction, and imports a new conversation only when there is none or the home is busy.
+
 `/switchboard:import` pulls a Codex session into the Claude session you are already in,
 instead of replacing it.
 

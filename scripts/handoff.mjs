@@ -15,6 +15,10 @@ import { rememberSurface, sourceSurface } from './lib/surface.mjs';
 import { wrapperActive } from './lib/agentContext.mjs';
 import { claudeProcess } from './lib/claudeSession.mjs';
 import { resolveCodexTty } from './lib/currentSession.mjs';
+import { codexHome, mergeToCodex, saveExported } from './lib/mergeToCodex.mjs';
+import { claudeEntries } from './lib/claudeToEntries.mjs';
+import { readMerged, originTranscript, mergeSession } from './lib/mergeBack.mjs';
+import { listSessions } from './lib/codexRollout.mjs';
 
 const PENDING = fileURLToPath(new URL('./pending.mjs', import.meta.url));
 
@@ -101,12 +105,44 @@ async function main() {
 
   // Codex imports a Claude transcript directly, so handing it the file we are
   // already reading skips a synthesised copy of what it is about to parse.
-  const written = await target.write({
-    entries: read.entries,
-    cwd,
-    preamble: read.preamble,
-    transcript: source.id === 'claude' ? live.source : null,
-  });
+  let written;
+  if (source.id === 'claude' && target.id === 'codex') {
+    const home = codexHome(live.source);
+    if (home) {
+      const r = await mergeToCodex(live.source, { apply: true, requireIdle: false });
+      if (r.status === 'merged' || r.status === 'up-to-date') {
+        written = { id: r.threadId, source: home.rollout, cwd, reused: true };
+      } else {
+        process.stderr.write(`switchboard: merge into Codex thread ${home.threadId.slice(0, 8)} skipped (${r.status}); importing a new thread\n`);
+      }
+    }
+  }
+  if (source.id === 'codex' && target.id === 'claude') {
+    const session = listSessions({ limit: Infinity }).find((s) => s.file === live.source);
+    const threadId = session?.threadId || session?.sessionId;
+    if (session && (readMerged()[live.source] || originTranscript(threadId))) {
+      const r = mergeSession(session, { apply: true, stopClaude: true });
+      if (r.status === 'merged' || r.status === 'up-to-date') {
+        written = { id: path.basename(r.transcript, '.jsonl'), source: r.transcript, cwd, reused: true };
+      } else {
+        process.stderr.write(`switchboard: merge into Claude session ${path.basename(r.transcript, '.jsonl').slice(0, 8)} skipped (${r.status}); importing a new conversation\n`);
+      }
+    }
+  }
+  if (!written) {
+    const exporting = source.id === 'claude' && target.id === 'codex';
+    const lastUuid = exporting ? claudeEntries(live.source).lastUuid : null;
+    written = await target.write({
+      entries: read.entries,
+      cwd,
+      preamble: read.preamble,
+      transcript: source.id === 'claude' ? live.source : null,
+    });
+    if (exporting) {
+      const session = listSessions({ limit: Infinity }).find((s) => s.threadId === written.id || s.sessionId === written.id);
+      if (session) saveExported(live.source, { threadId: written.id, rollout: session.file, lastUuid, at: Date.now() });
+    }
+  }
 
   const from = live.id ? `${source.id} ${live.id.slice(0, 8)}` : `this ${source.label} conversation`;
   // A harness switchboard cannot write a session file for gets the conversation

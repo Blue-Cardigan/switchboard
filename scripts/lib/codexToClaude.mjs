@@ -239,6 +239,7 @@ export function rolloutEntries(file, { from = 0, to = null, cwd = null } = {}) {
   const entries = [];
   const pending = new Map();
   let hadCalls = false;
+  let claudeTurn = null;
   let cursor = start;
   let dropPartial = skipped > 0;
   if (skipped) entries.push({ role: 'assistant', text: `… [${Math.round(skipped / 1e6)} MB of earlier Codex activity omitted] …` });
@@ -252,6 +253,13 @@ export function rolloutEntries(file, { from = 0, to = null, cwd = null } = {}) {
     let row;
     try { row = JSON.parse(line); } catch { return; }
     const p = row.payload || {};
+    if (row.type === 'event_msg' && p.type === 'task_started' && p.turn_id?.startsWith('sb-claude-')) {
+      claudeTurn = p.turn_id;
+    }
+    if (claudeTurn) {
+      if (row.type === 'event_msg' && p.type === 'task_complete' && p.turn_id === claudeTurn) claudeTurn = null;
+      return;
+    }
     if (row.type === 'response_item') {
       if (p.type === 'message' && (p.role === 'user' || p.role === 'assistant')) {
         const raw = textOf(p.content);
