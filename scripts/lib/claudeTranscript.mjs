@@ -171,7 +171,13 @@ export function buildRows(entries, { base, parentUuid = null, timestamp = new Da
         ...base, parentUuid, type: 'user', uuid: resultUuid, timestamp,
         message: {
           role: 'user',
-          content: tools.map((t) => ({ type: 'tool_result', tool_use_id: t.id, content: t.result, is_error: Boolean(t.isError) })),
+          // The API rejects an empty error result, and a failed command often prints nothing.
+          content: tools.map((t) => ({
+            type: 'tool_result',
+            tool_use_id: t.id,
+            content: String(t.result ?? '').trim() ? String(t.result) : (t.isError ? 'Failed with no output.' : 'No output.'),
+            is_error: Boolean(t.isError),
+          })),
         },
         ...(tools.length === 1 && tools[0].name === 'Bash' ? {
           toolUseResult: { stdout: tools[0].result, stderr: '', interrupted: false, isImage: false },
