@@ -48,7 +48,7 @@ export function normalise(entries) {
   const merged = [];
   for (const entry of entries) {
     const last = merged[merged.length - 1];
-    if (last && last.role === entry.role) last.text = `${last.text}\n\n${entry.text}`;
+    if (last && !last.tools && !entry.tools && last.role === entry.role) last.text = `${last.text}\n\n${entry.text}`;
     else merged.push({ ...entry });
   }
   return merged;
@@ -79,21 +79,28 @@ export function eventsToEntries(events, { label = 'Codex' } = {}) {
   return normalise(entries);
 }
 
-export function buildPreamble(meta, counts, truncated, from = { name: 'Codex', unit: 'thread' }) {
+export function buildPreamble(meta, counts, truncated, from = { name: 'Codex', unit: 'thread' }, { structured = false } = {}) {
   const lines = [
     `[Imported from ${from.name}]`,
     '',
     `This conversation started in ${from.name}${meta.model ? ` on ${meta.model}` : ''}` +
       `${meta.startedAt ? `, ${meta.startedAt.slice(0, 16).replace('T', ' ')}` : ''}` +
       `${meta.sessionId ? ` (${from.unit} ${meta.sessionId.slice(0, 8)})` : ''}, working in ${meta.cwd || 'an unknown directory'}.`,
-    `${from.name} ran ${counts.commands} command(s) and edited files ${counts.fileChanges} time(s) across ` +
-      `${counts.user} prompt(s) and ${counts.assistant} repl(ies).` +
+    (structured
+      ? `${from.name} made ${counts.tools} tool call(s) across ${counts.user} prompt(s) and ${counts.assistant} repl(ies).`
+      : `${from.name} ran ${counts.commands} command(s) and edited files ${counts.fileChanges} time(s) across ` +
+        `${counts.user} prompt(s) and ${counts.assistant} repl(ies).`) +
       (truncated ? ' The middle of the session was dropped for length; the opening and the recent tail are below.' : ''),
     '',
     `The assistant turns that follow were written by ${from.name}, not by you. Treat them as established`,
     'context and honour any commitments in them, but never describe that work as something you did.',
-    `Shell commands and edits are summarised as [${from.name} activity]; their full output is not preserved,`,
-    'so re-read files before relying on their contents. Continue the work from here.',
+    ...(structured ? [
+      `${from.name}'s tool calls appear as tool calls with their recorded output (outputs may be truncated).`,
+      'Continue the work from here.',
+    ] : [
+      `Shell commands and edits are summarised as [${from.name} activity]; their full output is not preserved,`,
+      'so re-read files before relying on their contents. Continue the work from here.',
+    ]),
     '',
     '--- imported conversation follows ---',
   ];
@@ -107,7 +114,10 @@ export function buildPreamble(meta, counts, truncated, from = { name: 'Codex', u
 export function buildRows(entries, { base, parentUuid = null, timestamp = new Date().toISOString() }) {
   const rows = [];
   const { sessionId } = base;
-  for (const entry of entries) {
+  const working = entries;
+  for (let i = 0; i < working.length; i++) {
+    const entry = working[i];
+    const tools = entry.tools || (entry.role === 'assistant' && working[i + 1]?.tools ? working[++i].tools : []);
     const uuid = crypto.randomUUID();
     if (entry.role === 'user') {
       rows.push({
@@ -138,9 +148,12 @@ export function buildRows(entries, { base, parentUuid = null, timestamp = new Da
           id: `msg_${uuid.replace(/-/g, '').slice(0, 24)}`,
           type: 'message',
           role: 'assistant',
-          stop_reason: 'end_turn',
+          stop_reason: tools.length ? 'tool_use' : 'end_turn',
           stop_sequence: null,
-          content: [{ type: 'text', text: entry.text }],
+          content: [
+            ...(typeof entry.text === 'string' ? [{ type: 'text', text: entry.text }] : []),
+            ...tools.map(({ id, name, input }) => ({ type: 'tool_use', id, name, input })),
+          ],
           usage: {
             input_tokens: 1,
             output_tokens: 1,
@@ -152,6 +165,20 @@ export function buildRows(entries, { base, parentUuid = null, timestamp = new Da
       });
     }
     parentUuid = uuid;
+    if (tools.length) {
+      const resultUuid = crypto.randomUUID();
+      rows.push({
+        ...base, parentUuid, type: 'user', uuid: resultUuid, timestamp,
+        message: {
+          role: 'user',
+          content: tools.map((t) => ({ type: 'tool_result', tool_use_id: t.id, content: t.result, is_error: Boolean(t.isError) })),
+        },
+        ...(tools.length === 1 && tools[0].name === 'Bash' ? {
+          toolUseResult: { stdout: tools[0].result, stderr: '', interrupted: false, isImage: false },
+        } : {}),
+      });
+      parentUuid = resultUuid;
+    }
   }
   return rows;
 }
@@ -159,7 +186,7 @@ export function buildRows(entries, { base, parentUuid = null, timestamp = new Da
 /**
  * Write a Claude Code transcript that `claude --resume <id>` will load as real history.
  */
-export function writeTranscript({ cwd, entries, preamble, gitBranch = '', version = '2.1.251' }) {
+export function writeTranscript({ cwd, entries, preamble, title = null, gitBranch = '', version = '2.1.251' }) {
   const dir = projectDirFor(cwd);
   fs.mkdirSync(dir, { recursive: true });
 
@@ -181,6 +208,10 @@ export function writeTranscript({ cwd, entries, preamble, gitBranch = '', versio
     : entries;
 
   const rows = buildRows(all, { base, parentUuid: null, timestamp });
+  if (typeof title === 'string' && title.trim()) rows.push(
+    { type: 'custom-title', customTitle: title, sessionId },
+    { type: 'agent-name', agentName: title, sessionId },
+  );
 
   const file = path.join(dir, `${sessionId}.jsonl`);
   fs.writeFileSync(file, `${rows.map((r) => JSON.stringify(r)).join('\n')}\n`);

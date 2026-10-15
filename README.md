@@ -265,6 +265,15 @@ appended transcript is backed up first under `~/.claude/switchboard/backups/`. L
 are fitted to `--budget` characters (default 200k): the opening exchange and the newest tail
 are kept and the middle is marked as omitted.
 
+Codex's work arrives as Claude's own tool calls, not a text log: shell commands as `Bash`
+with their output, patches as `Edit`/`Write` diffs, searches as `WebSearch`, questions as
+`AskUserQuestion`, plans as `ExitPlanMode`, sub-agents as `Agent` — so Claude desktop renders
+them as native collapsible rows and a resumed Claude sees real outputs. Over budget, older
+outputs and diffs are shortened first, then older tool calls dropped, and only then
+conversation. The thread's name becomes the conversation's title. `--rerender` rebuilds an
+earlier merge or import with the current renderer, in place; Claude turns added after it are
+re-linked to the rebuilt section.
+
 It will not write while either side is busy: a Codex thread mid-turn is skipped, and so is a
 Claude conversation that a live Claude process still holds, because that process would keep
 appending from its own in-memory end and orphan the merged turns. `--stop-claude` closes such

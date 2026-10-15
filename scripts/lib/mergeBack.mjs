@@ -15,8 +15,8 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { readCodexTurnsSince } from './codexTurns.mjs';
-import { buildRows, normalise } from './claudeTranscript.mjs';
+import { entryCounts, rolloutEntries, rolloutMeta } from './codexToClaude.mjs';
+import { buildPreamble, buildRows, normalise } from './claudeTranscript.mjs';
 import { ROOT } from './state.mjs';
 
 const MERGED = path.join(ROOT, 'merged.json');
@@ -181,7 +181,8 @@ function header(meta, continuing) {
     return [
       `[More turns from Codex, thread ${meta.threadId.slice(0, 8)}]`,
       'The conversation carried on in Codex after the last merge. The assistant turns below were written',
-      'by Codex, not by you; treat them as established context. Continue the work from here.',
+      'by Codex, not by you; treat them as established context.',
+      "Codex's tool calls appear as tool calls with their recorded output (outputs may be truncated). Continue the work from here.",
       '',
       '--- Codex turns follow ---',
     ].join('\n');
@@ -191,9 +192,9 @@ function header(meta, continuing) {
     '',
     `After this point the conversation moved to Codex (thread ${meta.threadId.slice(0, 8)}, working in ${meta.cwd || 'an unknown directory'}).`,
     'The assistant turns below were written by Codex, not by you. Treat them as established context and',
-    'honour any commitments in them, but never describe that work as something you did. Shell commands and',
-    'edits are summarised as [Codex activity]; their output is not preserved, so re-read files before',
-    'relying on their contents. Continue the work from here.',
+    'honour any commitments in them, but never describe that work as something you did.',
+    "Codex's tool calls appear as tool calls with their recorded output (outputs may be truncated).",
+    'Continue the work from here.',
     '',
     '--- Codex turns follow ---',
   ].join('\n');
@@ -203,7 +204,7 @@ function header(meta, continuing) {
  * Append alternating entries to an existing Claude transcript, chained from its
  * current leaf, after backing the file up.
  */
-export function appendToTranscript(file, entries, preamble) {
+export function appendToTranscript(file, entries, preamble, { title = null } = {}) {
   const leaf = lastChainRow(file);
   if (!leaf) throw new Error(`No conversation rows in ${file}.`);
 
@@ -255,6 +256,17 @@ export function appendToTranscript(file, entries, preamble) {
     ? [{ role: 'user', text: `${preamble}\n\n${merged[0].text}` }, ...merged.slice(1)]
     : [{ role: 'user', text: preamble }, ...merged];
   rows.push(...buildRows(all, { base, parentUuid, timestamp }));
+  if (typeof title === 'string' && title.trim()) {
+    let titled = false;
+    for (const { line } of linesFrom(file)) {
+      if (!line.includes('custom-title')) continue;
+      try { if (JSON.parse(line).type === 'custom-title') { titled = true; break; } } catch { /* Partial row. */ }
+    }
+    if (!titled) rows.push(
+      { type: 'custom-title', customTitle: title, sessionId: leaf.sessionId },
+      { type: 'agent-name', agentName: title, sessionId: leaf.sessionId },
+    );
+  }
 
   // The file may lack a trailing newline if it was cut short; never glue rows together.
   const fd = fs.openSync(file, 'r');
@@ -269,29 +281,108 @@ export function appendToTranscript(file, entries, preamble) {
 
 const MERGE_BUDGET = 200000;
 
+const RECENT_TOOLS = 40;
+
+function shrinkText(value, limit) {
+  const text = String(value ?? '');
+  return text.length <= limit ? text : `${text.slice(0, limit)}\n… [trimmed]`;
+}
+
+/** A tool round with its outputs cut to `result` chars and large inputs to `input` chars. */
+function shrinkRound(entry, { result, input }) {
+  return {
+    ...entry,
+    tools: entry.tools.map((tool) => {
+      const shrunk = { ...tool, result: shrinkText(tool.result, result) };
+      if (input !== null) {
+        shrunk.input = Object.fromEntries(Object.entries(tool.input || {}).map(([k, v]) => (
+          [k, typeof v === 'string' ? shrinkText(v, input) : v])));
+      }
+      return shrunk;
+    }),
+  };
+}
+
 /**
- * Fit merged turns into a context budget: the opening exchange and the newest tail
- * survive, the middle is dropped with a marker. What Codex did most recently is what
- * the next Claude turn has to build on; the Codex thread keeps the full record.
+ * Fit merged turns into a context budget, cheapest loss first. Conversation is
+ * what the next Claude turn most needs, so older tool output is shortened before
+ * anything is dropped: first outputs outside the newest rounds, then large inputs
+ * (diffs, file bodies), then every output, then older tool calls altogether. Only
+ * if that is not enough is the middle of the conversation dropped, keeping the opening exchange and the newest tail. The Codex thread
+ * keeps the full record.
  */
 export function fitTurns(turns, threadId, maxChars = MERGE_BUDGET) {
-  const size = (t) => t.text.length + 12;
-  const total = turns.reduce((n, t) => n + size(t), 0);
-  if (total <= maxChars) return { turns, dropped: 0 };
-  const head = turns.slice(0, 2);
-  let used = head.reduce((n, t) => n + size(t), 0);
-  const tail = [];
-  for (let i = turns.length - 1; i >= head.length; i -= 1) {
-    if (used + size(turns[i]) > maxChars) break;
-    tail.unshift(turns[i]);
-    used += size(turns[i]);
+  const size = (t) => t.tools
+    ? t.tools.reduce((n, tool) => n + JSON.stringify(tool.input).length + String(tool.result).length + 40, 0)
+    : t.text.length + 12;
+  const total = (list) => list.reduce((n, t) => n + size(t), 0);
+  if (total(turns) <= maxChars) return { turns, dropped: 0 };
+
+  const rounds = turns.map((t, i) => (t.tools ? i : -1)).filter((i) => i >= 0);
+  // The newest rounds, up to RECENT_TOOLS calls (always at least the last round),
+  // keep their detail longest: they are what the next turn builds on.
+  const recent = new Set();
+  let counted = 0;
+  for (const i of [...rounds].reverse()) {
+    if (recent.size && counted + turns[i].tools.length > RECENT_TOOLS) break;
+    recent.add(i);
+    counted += turns[i].tools.length;
   }
-  const dropped = turns.length - head.length - tail.length;
+  const stages = [
+    (t, i) => (t.tools && !recent.has(i) ? shrinkRound(t, { result: 300, input: null }) : t),
+    (t, i) => (t.tools && !recent.has(i) ? shrinkRound(t, { result: 200, input: 600 }) : t),
+    (t) => (t.tools ? shrinkRound(t, { result: 400, input: 1200 }) : t),
+  ];
+  stages.push((t, i) => (t.tools && !recent.has(i) ? shrinkRound(t, { result: 80, input: 160 }) : t));
+  stages.push((t) => (t.tools ? shrinkRound(t, { result: 80, input: 160 }) : t));
+  let working = turns;
+  for (const stage of stages) {
+    working = working.map(stage);
+    if (total(working) <= maxChars) return { turns: working, dropped: 0, trimmed: true };
+  }
+
+  // Still over: drop older tool rounds outright, oldest first, keeping every word of
+  // conversation. Each run of dropped rounds leaves a one-line count behind.
+  const drop = new Set();
+  // Leave room for the one-line counts that replace each dropped run.
+  let excess = total(working) - maxChars + 400;
+  for (const i of rounds) {
+    if (excess <= 0 || recent.has(i)) break;
+    drop.add(i);
+    excess -= size(working[i]);
+  }
+  if (drop.size) {
+    const thinned = [];
+    let run = 0;
+    const flushRun = () => {
+      if (!run) return;
+      thinned.push({ role: 'assistant', text: `[${run} earlier Codex tool call(s) omitted for length]` });
+      run = 0;
+    };
+    working.forEach((t, i) => {
+      if (drop.has(i)) { run += t.tools.length; return; }
+      flushRun();
+      thinned.push(t);
+    });
+    flushRun();
+    working = thinned;
+    if (total(working) <= maxChars) return { turns: working, dropped: 0, trimmed: true };
+  }
+
+  const head = working.slice(0, 2);
+  let used = total(head);
+  const tail = [];
+  for (let i = working.length - 1; i >= head.length; i -= 1) {
+    if (used + size(working[i]) > maxChars) break;
+    tail.unshift(working[i]);
+    used += size(working[i]);
+  }
+  const dropped = working.length - head.length - tail.length;
   const marker = {
     role: 'assistant',
     text: `… [${dropped} Codex turn(s) omitted for length; Codex thread ${threadId} holds them in full] …`,
   };
-  return { turns: [...head, marker, ...tail], dropped };
+  return { turns: [...head, marker, ...tail], dropped, trimmed: true };
 }
 
 /**
@@ -323,7 +414,7 @@ export function mergeSession(session, { apply = false, stopClaude = false, trans
   const { inFlight } = codexTurnState(session.file);
   if (inFlight) return { ...result, status: 'codex-busy' };
 
-  const { turns, cursor } = readCodexTurnsSince(session.file, from);
+  const { entries: turns, cursor } = rolloutEntries(session.file, { from, cwd: session.cwd });
   if (!turns.length) {
     if (apply) saveMerged(key, { threadId, transcript: target, cursor, at: Date.now() });
     return { ...result, status: 'up-to-date', turns: 0, continuing };
@@ -338,9 +429,103 @@ export function mergeSession(session, { apply = false, stopClaude = false, trans
   if (!apply) return { ...result, status: 'ready', turns: turns.length };
 
   const fitted = fitTurns(turns, threadId, budget);
-  const written = appendToTranscript(target, fitted.turns, header({ threadId, cwd: session.cwd }, continuing));
+  const written = appendToTranscript(target, fitted.turns, header({ threadId, cwd: session.cwd }, continuing), { title: session.name || null });
   saveMerged(key, { threadId, transcript: target, cursor, at: Date.now() });
   return { ...result, ...written, status: 'merged', turns: turns.length, dropped: fitted.dropped };
+}
+
+const MARKER = /^\[(Continued in Codex|Imported from Codex|More turns from Codex)/;
+
+function isMarker(row) {
+  const content = row?.type === 'user' ? row.message?.content : null;
+  return typeof content === 'string' && MARKER.test(content);
+}
+
+/**
+ * Re-render the section an earlier merge or import wrote, from the same span of the
+ * rollout, with the current renderer. Rows one merge writes share one timestamp,
+ * which is how the section is found; Claude turns that came after it are re-pointed
+ * at the new section's last row, so a conversation continued in Claude stays intact.
+ */
+export function rerenderSession(session, { apply = false, stopClaude = false, budget = MERGE_BUDGET } = {}) {
+  const threadId = session.threadId || session.sessionId;
+  const previous = readMerged()[session.file];
+  if (!previous?.transcript) return { status: 'not-merged', threadId };
+  const target = previous.transcript;
+  const result = { threadId, transcript: target, sessionId: path.basename(target, '.jsonl') };
+  if (!fs.existsSync(target)) return { ...result, status: 'transcript-missing' };
+
+  const lines = fs.readFileSync(target, 'utf8').split('\n').filter((l) => l.trim());
+  const rows = lines.map((l) => { try { return JSON.parse(l); } catch { return null; } });
+  const markers = rows.map((r, i) => (isMarker(r) ? i : -1)).filter((i) => i >= 0);
+  if (markers.length !== 1) return { ...result, status: 'unsupported', detail: `${markers.length} merged sections` };
+
+  const m = markers[0];
+  const stamp = rows[m].timestamp;
+  let start = m;
+  while (start > 0 && rows[start - 1]?.timestamp === stamp && rows[start - 1]?.uuid) start -= 1;
+  let end = m;
+  while (end + 1 < rows.length && rows[end + 1]?.timestamp === stamp) end += 1;
+  const fresh = isMarker(rows[m]) && rows[m].message.content.startsWith('[Imported from Codex]');
+
+  const from = fresh ? 0 : importBoundary(session.file).offset;
+  const { entries } = rolloutEntries(session.file, { from, to: previous.cursor, cwd: session.cwd });
+  if (!entries.length) return { ...result, status: 'empty' };
+  const fitted = fitTurns(entries, threadId, budget);
+  if (!apply) return { ...result, status: 'ready-rerender', turns: entries.length, dropped: fitted.dropped };
+
+  let live = claudeLivePids(result.sessionId);
+  if (live.length && live.busy.length) return { ...result, status: 'claude-busy', pids: live.busy };
+  if (live.length && stopClaude) live = stopPids(live);
+  if (live.length) return { ...result, status: 'claude-live', pids: live };
+
+  const first = rows[start];
+  const base = {
+    isSidechain: false,
+    userType: first.userType || 'external',
+    entrypoint: first.entrypoint || 'cli',
+    cwd: first.cwd,
+    sessionId: first.sessionId,
+    version: first.version,
+    gitBranch: first.gitBranch || '',
+  };
+  const preamble = fresh
+    ? buildPreamble({ ...rolloutMeta(session.file), sessionId: threadId, cwd: base.cwd }, entryCounts(entries),
+      Boolean(fitted.dropped), undefined, { structured: true })
+    : header({ threadId, cwd: session.cwd }, false);
+  const merged = normalise(fitted.turns);
+  const all = merged[0]?.role === 'user'
+    ? [{ role: 'user', text: `${preamble}\n\n${merged[0].text}` }, ...merged.slice(1)]
+    : [{ role: 'user', text: preamble }, ...merged];
+  const fresh_rows = buildRows(all, { base, parentUuid: first.parentUuid ?? null, timestamp: stamp });
+
+  // Everything that pointed into the old section now points at the new one's end.
+  const oldIds = new Set(rows.slice(start, end + 1).map((r) => r?.uuid).filter(Boolean));
+  const newLast = fresh_rows.at(-1).uuid;
+  const after = rows.slice(end + 1).map((r) => {
+    if (!r) return r;
+    const out = { ...r };
+    for (const key of ['parentUuid', 'logicalParentUuid', 'leafUuid']) {
+      if (oldIds.has(out[key])) out[key] = newLast;
+    }
+    return out;
+  });
+  const kept = rows.slice(start, end + 1).filter((r) => r && !r.uuid && r.type !== 'user' && r.type !== 'assistant');
+  const hasTitle = rows.some((r) => r?.type === 'custom-title');
+  const titleRows = !hasTitle && session.name
+    ? [{ type: 'custom-title', customTitle: session.name, sessionId: base.sessionId },
+       { type: 'agent-name', agentName: session.name, sessionId: base.sessionId }]
+    : [];
+
+  fs.mkdirSync(BACKUPS, { recursive: true });
+  const backup = path.join(BACKUPS, `${result.sessionId}.${Date.now()}.jsonl`);
+  fs.copyFileSync(target, backup);
+  const out = [...rows.slice(0, start), ...fresh_rows, ...kept, ...titleRows, ...after]
+    .filter(Boolean).map((r) => JSON.stringify(r)).join('\n');
+  const tmp = `${target}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, `${out}\n`);
+  fs.renameSync(tmp, target);
+  return { ...result, status: 'rerendered', turns: entries.length, dropped: fitted.dropped, backup, rows: fresh_rows.length };
 }
 
 /** Record a transcript written from scratch for a thread that began in Codex. */

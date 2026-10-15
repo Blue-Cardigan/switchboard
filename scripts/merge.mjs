@@ -5,14 +5,15 @@
 // Codex since the last one.
 //   merge.mjs [selector...] [--imported] [--apply] [--archive] [--stop-claude] [--open] [--budget <chars>]
 // Selector: rollout id prefix, thread name, or rollout path. --imported takes every
-// recent thread that Codex imported from Claude. Without --apply it only reports.
-import fs from 'node:fs';
+// recent thread that Codex imported from Claude. --rerender rebuilds an earlier merge
+// or import with the current renderer. Without --apply it only reports.
 import os from 'node:os';
 import path from 'node:path';
-import { listSessions, readRollout, trimEvents } from './lib/codexRollout.mjs';
-import { buildPreamble, eventsToEntries, writeTranscript } from './lib/claudeTranscript.mjs';
+import { listSessions } from './lib/codexRollout.mjs';
+import { rolloutEntries, entryCounts } from './lib/codexToClaude.mjs';
+import { buildPreamble, writeTranscript } from './lib/claudeTranscript.mjs';
 import {
-  archiveCodexThread, codexTurnState, mergeSession, originTranscript, readMerged, recordFreshImport,
+  archiveCodexThread, codexTurnState, fitTurns, mergeSession, originTranscript, readMerged, recordFreshImport, rerenderSession,
 } from './lib/mergeBack.mjs';
 import { openDesktop } from './lib/launch.mjs';
 
@@ -54,15 +55,14 @@ function resolve(sessions, selector) {
 /** A thread that began in Codex: write it as a new Claude conversation. */
 async function importFresh(session, flags) {
   if (codexTurnState(session.file).inFlight) return { status: 'codex-busy' };
-  const cursor = fs.statSync(session.file).size;
   if (!flags.apply) return { status: 'ready-new' };
-  const { meta, events, counts, truncated } = await readRollout(session.file);
-  const fitted = trimEvents(events);
-  const entries = eventsToEntries(fitted.events);
+  const cwd = session.cwd || process.cwd();
+  const { entries, cursor } = rolloutEntries(session.file, { cwd });
   if (!entries.length) return { status: 'empty' };
-  const cwd = meta.cwd || session.cwd || process.cwd();
-  const preamble = buildPreamble({ ...meta, cwd }, counts, truncated || fitted.trimmed);
-  const written = writeTranscript({ cwd, entries, preamble });
+  const threadId = session.threadId || session.sessionId;
+  const fitted = fitTurns(entries, threadId, flags.budget || 200000);
+  const preamble = buildPreamble({ ...session, sessionId: threadId, cwd }, entryCounts(entries), Boolean(fitted.dropped), undefined, { structured: true });
+  const written = writeTranscript({ cwd, entries: fitted.turns, preamble, title: session.name || null });
   recordFreshImport(session, written.file, cursor);
   return { status: 'imported-new', transcript: written.file, sessionId: written.sessionId, cwd, rows: written.rows };
 }
@@ -78,7 +78,7 @@ async function main() {
   } else if (rest.length) {
     targets = rest.map((sel) => resolve(sessions, sel));
   } else {
-    console.log('Usage: merge.mjs [selector...] [--imported] [--apply] [--archive] [--stop-claude] [--open]');
+    console.log('Usage: merge.mjs [selector...] [--imported] [--apply] [--archive] [--stop-claude] [--open] [--rerender] [--budget <chars>]');
     process.exit(1);
   }
 
@@ -97,7 +97,12 @@ async function main() {
     let result;
     try {
       const hasHome = merged[session.file] || originTranscript(session.threadId || session.sessionId);
-      result = hasHome
+      const options = {
+        apply: Boolean(flags.apply),
+        stopClaude: Boolean(flags['stop-claude']),
+        ...(flags.budget ? { budget: flags.budget } : {}),
+      };
+      result = flags.rerender ? rerenderSession(session, options) : hasHome
         ? mergeSession(session, {
           apply: Boolean(flags.apply),
           stopClaude: Boolean(flags['stop-claude']),
@@ -108,7 +113,7 @@ async function main() {
       result = { status: 'error', error: error.message };
     }
 
-    const ok = ['merged', 'imported-new', 'up-to-date', 'ready', 'ready-new'].includes(result.status);
+    const ok = ['merged', 'imported-new', 'up-to-date', 'ready', 'ready-new', 'rerendered', 'ready-rerender'].includes(result.status);
     if (!ok) failed += 1;
     const detail = {
       merged: `appended ${result.turns} turn(s)${result.dropped ? ` (${result.dropped} omitted for length)` : ''} to ${result.sessionId?.slice(0, 8)} (backup ${result.backup && path.basename(result.backup)})`,
@@ -118,6 +123,10 @@ async function main() {
         : `no Codex turns since it was imported from ${result.sessionId?.slice(0, 8)}`,
       ready: `would append ${result.turns} turn(s) to ${result.sessionId?.slice(0, 8)}`,
       'ready-new': 'began in Codex; would import as a new Claude conversation',
+      'ready-rerender': `would re-render ${result.turns} Codex entr(ies)${result.dropped ? ` (${result.dropped} omitted for length)` : ''} in ${result.sessionId?.slice(0, 8)}`,
+      rerendered: `re-rendered ${result.turns} Codex entr(ies) as ${result.rows} rows in ${result.sessionId?.slice(0, 8)} (backup ${result.backup && path.basename(result.backup)})`,
+      'not-merged': 'never merged or imported, so nothing to re-render',
+      unsupported: `cannot re-render: ${result.detail}`,
       'codex-busy': 'Codex is mid-turn; stop it or let it finish, then rerun',
       'claude-live': `Claude still has ${result.sessionId?.slice(0, 8)} open (pid ${result.pids?.join(', ')}); close it or pass --stop-claude`,
       'claude-busy': `Claude is mid-turn in ${result.sessionId?.slice(0, 8)} (pid ${result.pids?.join(', ')}); let it finish, then rerun`,

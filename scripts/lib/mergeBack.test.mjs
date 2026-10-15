@@ -8,7 +8,7 @@ import path from 'node:path';
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'sb-merge-'));
 process.env.HOME = home;
 process.env.CODEX_HOME = path.join(home, '.codex');
-const { mergeSession, importBoundary, codexTurnState, fitTurns } = await import('./mergeBack.mjs');
+const { mergeSession, importBoundary, codexTurnState, fitTurns, appendToTranscript } = await import('./mergeBack.mjs');
 
 const cwd = '/work/forest';
 const claudeId = '11111111-2222-4333-8444-555555555555';
@@ -55,11 +55,15 @@ test('appends only Codex-native turns, chained to the Claude leaf, scaffolding s
   const all = rows();
   const added = all.slice(3);
   assert.equal(added[0].parentUuid, 'a1');
-  assert.deepEqual(added.map((r) => r.type), ['user', 'assistant']);
+  assert.deepEqual(added.map((r) => r.type), ['user', 'assistant', 'user', 'assistant']);
   assert.match(added[0].message.content, /^\[Continued in Codex\]/);
   assert.match(added[0].message.content, /Now in Codex$/);
   assert.doesNotMatch(added[0].message.content, /AGENTS\.md|external_codex_apps|Start in Claude/);
-  assert.match(added[1].message.content[0].text, /Codex reply one[\s\S]*\$ git status/);
+  assert.equal(added[1].message.content[0].type, 'tool_use');
+  assert.equal(added[1].message.content[0].name, 'Bash');
+  assert.equal(added[1].message.content[0].input.command, 'git status');
+  assert.equal(added[2].message.content[0].tool_use_id, added[1].message.content[0].id);
+  assert.equal(added[3].message.content[0].text, 'Codex reply one');
   assert.ok(added.every((r) => r.sessionId === claudeId && r.cwd === cwd));
   assert.ok(fs.existsSync(result.backup));
 });
@@ -91,6 +95,51 @@ test('fitTurns keeps the opening and the newest tail', () => {
   assert.equal(fitted[0].text, turns[0].text);
   assert.equal(fitted.at(-1).text, turns.at(-1).text);
   assert.match(fitted[2].text, /omitted for length/);
+});
+
+test('appends a title only when the transcript has none and keeps chaining past metadata', () => {
+  setup();
+  const result = mergeSession({ ...session(), name: 'Imported title' }, { apply: true });
+  assert.equal(result.status, 'merged');
+  assert.deepEqual(rows().slice(-2), [
+    { type: 'custom-title', customTitle: 'Imported title', sessionId: claudeId },
+    { type: 'agent-name', agentName: 'Imported title', sessionId: claudeId },
+  ]);
+  const leaf = rows().at(-3);
+  const before = rows().length;
+  appendToTranscript(transcript, [{ role: 'assistant', text: 'Continued' }], 'More', { title: 'Replacement' });
+  assert.equal(rows()[before].parentUuid, leaf.uuid);
+  assert.equal(rows().filter((row) => row.type === 'custom-title').length, 1);
+});
+
+test('fitTurns budgets inputs and results without splitting a tool round', () => {
+  const round = { role: 'assistant', tools: [
+    { id: 'one', name: 'Bash', input: { command: 'x'.repeat(500) }, result: 'y'.repeat(500) },
+    { id: 'two', name: 'Read', input: { file_path: '/tmp/x' }, result: 'read' },
+  ] };
+  const head = [{ role: 'user', text: 'start' }, { role: 'assistant', text: 'reply' }];
+  const all = [...head, round, { role: 'user', text: 'latest' }];
+  assert.equal(fitTurns(all, threadId, 2000).turns, all);
+  // Over budget, tool output is shortened before any conversation is dropped,
+  // and the round is shortened as a whole, never split.
+  const fitted = fitTurns(all, threadId, 500);
+  assert.equal(fitted.dropped, 0);
+  assert.deepEqual(fitted.turns.filter((t) => !t.tools).map((t) => t.text), ['start', 'reply', 'latest']);
+  const shrunk = fitted.turns.find((t) => t.tools);
+  assert.deepEqual(shrunk.tools.map((t) => t.id), ['one', 'two']);
+  assert.ok(shrunk.tools[0].result.length < 500 && shrunk.tools[0].input.command.length < 500);
+});
+
+test('fitTurns drops older tool rounds before conversation, and the middle only as a last resort', () => {
+  const rounds = Array.from({ length: 60 }, (_, i) => ({
+    role: 'assistant', tools: [{ id: `t${i}`, name: 'Bash', input: { command: 'c'.repeat(150) }, result: 'r'.repeat(80) }],
+  }));
+  const prose = [{ role: 'user', text: 'start' }, ...rounds, { role: 'assistant', text: 'done' }];
+  const fitted = fitTurns(prose, threadId, 12000);
+  assert.equal(fitted.dropped, 0);
+  assert.match(fitted.turns.find((t) => !t.tools && /omitted/.test(t.text)).text, /earlier Codex tool call\(s\) omitted/);
+  assert.equal(fitted.turns.at(-1).text, 'done');
+  assert.equal(fitted.turns[0].text, 'start');
 });
 
 test.after(() => fs.rmSync(home, { recursive: true, force: true }));

@@ -1,6 +1,6 @@
 ---
 description: Bring Codex threads back into Claude — append their Codex turns to the Claude conversations they came from, or import ones that began in Codex
-argument-hint: "[<thread name or id>... | --imported] [--apply] [--stop-claude] [--archive] [--open]"
+argument-hint: "[<thread name or id>... | --imported] [--apply] [--stop-claude] [--archive] [--open] [--rerender]"
 allowed-tools: Bash(node:*)
 ---
 

@@ -10,6 +10,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
 import { listSessions, readRollout, trimEvents } from './lib/codexRollout.mjs';
+import { rolloutEntries, rolloutMeta, entryCounts } from './lib/codexToClaude.mjs';
+import { fitTurns } from './lib/mergeBack.mjs';
 import { eventsToEntries, buildPreamble, writeTranscript } from './lib/claudeTranscript.mjs';
 import { desktopRoot, listDesktopSessions, materialiseDesktopSession, pickDesktopSession } from './lib/claudeDesktop.mjs';
 import { detectCurrentSession, findCodexAncestor, openRollouts, resolveCodexTty } from './lib/currentSession.mjs';
@@ -78,16 +80,16 @@ function pick(sessions, flags, rest, cwd) {
 }
 
 async function convert(chosen, flags) {
-  const { meta, events, counts, truncated } = await readRollout(chosen.file);
-  const fitted = flags.full
-    ? { events, trimmed: false }
-    : trimEvents(events, { maxChars: flags.budget ? Number(flags.budget) : undefined });
-  const entries = eventsToEntries(fitted.events);
-  if (!entries.length) throw new Error(`Session ${chosen.sessionId.slice(0, 8)} has no recoverable conversation.`);
+  const meta = rolloutMeta(chosen.file);
   const target = meta.cwd || chosen.cwd || process.cwd();
-  const preamble = buildPreamble({ ...meta, cwd: target }, counts, truncated || fitted.trimmed);
-  const written = writeTranscript({ cwd: target, entries, preamble });
-  return { written, target, counts, trimmed: truncated || fitted.trimmed };
+  const { entries } = rolloutEntries(chosen.file, { cwd: target });
+  if (!entries.length) throw new Error(`Session ${chosen.sessionId.slice(0, 8)} has no recoverable conversation.`);
+  const fitted = flags.full ? { turns: entries, dropped: 0 }
+    : fitTurns(entries, meta.sessionId || chosen.sessionId, flags.budget ? Number(flags.budget) : 200000);
+  const counts = entryCounts(entries);
+  const preamble = buildPreamble({ ...meta, cwd: target }, counts, Boolean(fitted.dropped), undefined, { structured: true });
+  const written = writeTranscript({ cwd: target, entries: fitted.turns, preamble, title: chosen.name || null });
+  return { written, target, counts, trimmed: Boolean(fitted.dropped) };
 }
 
 async function handoff(verb, flags, sessions, cwd, rest = []) {
